@@ -1,0 +1,14 @@
+schema: spec-driven
+
+# Project context — shown to AI when creating artifacts
+context: |
+  Tech stack: <describe your stack here, e.g. Python, Postgres, Node, etc.>
+  Architecture: Blueprint layer — LikeC4 model in model/*.c4, intent log in git history
+  Spec convention: EARS notation is mandatory (WHEN condition THE SYSTEM SHALL behavior)
+
+# Per-artifact rules
+rules:
+  spec:
+    - Write requirements in EARS notation (WHEN [condition] THE SYSTEM SHALL [behavior])
+    - EARS is the default spec format. Every spec draft begins with EARS requirements.
+    - Do not skip the EARS intermediate step — produce EARS requirements before any .c4 diff.

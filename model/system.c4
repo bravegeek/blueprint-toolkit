@@ -1,0 +1,67 @@
+specification {
+  // ── Element kinds ──────────────────────────────────────────
+  // Standard assessment layers. Add or remove kinds to fit your stack.
+  element actor            // a human or external agent interacting with the system
+  element system           // the top-level system boundary
+  element service          // a running process or application
+  element script           // a one-shot / batch process
+  element datastore        // relational or document database, table, or view
+  element bucket           // object storage (S3, GCS, Azure Blob, etc.)
+  element queue            // message queue, task queue, or event stream
+  element externalSystem   // third-party dependency outside the system boundary
+  element infrastructure   // hosting, networking, runtime infrastructure
+
+  // ── Relationship kinds ─────────────────────────────────────
+  relationship calls
+  relationship reads
+  relationship writes
+  relationship triggers
+  relationship fetches
+  relationship uploads
+  relationship claims
+
+  // ── Tags (cross-cutting concerns) ──────────────────────────
+  // Add project-specific tags here.
+  tag deprecated { color #DC143C }
+
+  // ── Required metadata fields ──────────────────────────────
+  // Every element must carry `owner`.
+  // Elements handling data also need `dataClassification`.
+  // Elements exposed to external traffic also need `auth`.
+
+  // ── Deployment Node kinds ──────────────────────────────────
+  deploymentNode environment
+  deploymentNode node
+  deploymentNode container
+}
+
+model {
+  // Replace this example with your own elements after running /assessment.
+  //
+  // Example:
+  //
+  // actor developer {
+  //   title 'Developer'
+  // }
+  //
+  // system mySystem {
+  //   title 'My System'
+  //
+  //   service api {
+  //     title 'API Service'
+  //     technology 'Node, Express'
+  //   }
+  //
+  //   datastore db {
+  //     title 'PostgreSQL'
+  //     technology 'PostgreSQL 15'
+  //   }
+  // }
+  //
+  // developer -> mySystem.api 'uses'
+  // mySystem.api -> mySystem.db 'reads/writes'
+}
+
+deployment {
+  // Deployment topology goes here after /assessment.
+}
