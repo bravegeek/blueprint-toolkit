@@ -2,8 +2,8 @@
   "mcpServers": {
     "likec4": {
       "command": "likec4",
-      "args": ["mcp", "--workspace", "model/"],
-      "description": "Read-only LikeC4 model query. Never use MCP to write .c4 files — all model changes go through the blueprint-change review flow and are committed as spec entries."
+      "args": ["mcp", "--workspace", "blueprint/model/"],
+      "description": "Read-only LikeC4 model query. Never use MCP to write .c4 files — all model changes go through /blueprint-change."
     }
   }
 }

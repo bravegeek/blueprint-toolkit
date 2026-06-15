@@ -8,7 +8,7 @@ Read the actual system state in four passes, propose a LikeC4 model with confide
 /assessment [path]
 ```
 
-`path` defaults to `../` (sibling directory). Pass any local path to assess a different target.
+`path` defaults to `.` (project root). Pass any local path to assess a different target.
 
 ---
 
@@ -320,4 +320,4 @@ Present the proposed `.c4` and ask only about INFERRED and AMBIGUOUS items:
 2. **Gap check** — "What does this miss that the code doesn't make visible?" (business logic, external integrations, user actors)
 3. **Metadata** — "What `owner`, `dataClassification`, and `auth` values should be added?"
 
-When the developer confirms, commit as a spec entry following the intent log convention in `constitution.md`.
+When the developer confirms, commit the `.c4` model.

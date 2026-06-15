@@ -23,7 +23,7 @@ ticket / description
   → approve or correct via conversation
 ```
 
-If the developer approves: hand off to `/openspec-propose` to scaffold `proposal.md`, `design.md`, and `tasks.md`.  
+If the developer approves: they commit the `.c4` diff and implement.
 If the developer corrects: revise the EARS and diff in conversation, repeat.
 
 ---
@@ -106,14 +106,14 @@ Open the browser and look at the [view name] view.
 Changed elements are highlighted.
 
 Does the diagram look right?
-  - Approve → I'll hand off to /openspec-propose to scaffold the change artifacts.
+  - Approve → commit the `.c4` diff and implement.
   - Correct → Tell me what's wrong and we'll revise.
 ```
 
 ### 6 — Wait for approval or correction
 
 **If approved:** confirm which EARS requirements are satisfied, then say:
-> "Run `/openspec-propose` or ask me to scaffold the proposal, design, and tasks."
+> "Commit the `.c4` diff and implement."
 
 **If corrected:** revise the EARS requirements and diff based on the developer's feedback. Repeat from step 4. Never commit anything until approval.
 
@@ -123,7 +123,7 @@ Does the diagram look right?
 
 - EARS requirements MUST appear before the `.c4` diff. Never skip this step.
 - Never invent elements not in the current model or the ticket. If uncertain, mark as `[unverified]`.
-- Never write `model/*.c4` files directly. The diff is a proposal only — the developer commits it as a spec entry.
+- Never write `blueprint/model/*.c4` files directly. The diff is a proposal only — the developer commits it.
 - Never generate `design.md`, `tasks.md`, or code before approval.
 - `dataClassification` and `auth` are always AMBIGUOUS — always leave as `?` for developer input.
 - If the MCP server is unavailable and `model/system.c4` is empty, say so and suggest running `/assessment` first.

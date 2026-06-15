@@ -24,10 +24,9 @@ specification {
   // Add project-specific tags here.
   tag deprecated { color #DC143C }
 
-  // ── Required metadata fields ──────────────────────────────
-  // Every element must carry `owner`.
-  // Elements handling data also need `dataClassification`.
-  // Elements exposed to external traffic also need `auth`.
+  // ── Recommended metadata fields ───────────────────────────
+  // Consider adding `owner`, `dataClassification`, and `auth` to elements
+  // where those are meaningful for your project.
 
   // ── Deployment Node kinds ──────────────────────────────────
   deploymentNode environment
