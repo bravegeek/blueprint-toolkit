@@ -249,7 +249,65 @@ grep -E "^[a-zA-Z_-]+:" TARGET_PATH/Makefile
 **Fallback — import graph ordering** (no orchestrator, no schedule):
 If module A imports module B, A is downstream of B. Derive a soft DAG from import depth. Confidence = INFERRED.
 
-**Output of Pass 3:** `{ module_edges, table_reads, table_writes, pipeline_dag, pipeline_confidence }`.
+### 3c — Component and Contract Discovery
+
+**Goal:** Within each service/module found in Pass 1, identify the primary classes (structural units) and the typed interfaces that cross module boundaries (contracts). These become `component` and `contract` elements in the proposed `.c4`.
+
+**Find components — exported classes by language:**
+
+```bash
+# Python
+grep -rn "^class " TARGET_PATH --include="*.py" | grep -v "test_\|Test" | sort
+
+# TypeScript / JavaScript
+grep -rn "^export class " TARGET_PATH/src --include="*.ts" | sort
+
+# Go
+grep -rn "^type .* struct" TARGET_PATH --include="*.go" | sort
+
+# Rust
+grep -rn "^pub struct" TARGET_PATH/src --include="*.rs" | sort
+```
+
+Model only classes with structural significance — primary controllers, providers, observers. Skip helpers, utilities, and test doubles.
+
+**Find contracts — typed interfaces that cross module boundaries:**
+
+Look for interface/type definition files. These are the contracts between modules — the types one module exports and another consumes.
+
+```bash
+# Python — protocols and type stubs
+find TARGET_PATH -name "protocols.py" -o -name "types.py" -o -name "interfaces.py" | sort
+
+# TypeScript — find types files and public interface files
+find TARGET_PATH/src -name "types.ts" -o -name "types.d.ts" -o -name "interfaces.ts" | sort
+
+# Go — interface types within packages
+grep -rn "^type .* interface" TARGET_PATH --include="*.go" | sort
+
+# Rust — traits
+grep -rn "^pub trait" TARGET_PATH/src --include="*.rs" | sort
+```
+
+Read each types/interfaces file. For each interface or protocol:
+- Is it consumed by a different module than the one that defines it? → it's a **cross-module contract** (`contract` element, STRUCTURAL if the import is verifiable)
+- Is it only used internally? → skip (internal detail, not worth modeling)
+
+**Find the runtime wiring — the orchestration class:**
+
+Look for a class that holds references to all other modules and drives the lifecycle. Names like `Pipeline`, `Coordinator`, `Runner`, `Orchestrator`, `App`, `Integration`. Read it fully — this reveals the actual component-level relationships (which class calls which method on which other class).
+
+```bash
+# Python
+grep -rln "class.*Pipeline\|class.*Coordinator\|class.*Runner\|class.*Orchestrator" TARGET_PATH --include="*.py"
+
+# TypeScript
+grep -rln "class.*Pipeline\|class.*Coordinator\|class.*Runner\|class.*Orchestrator" TARGET_PATH/src --include="*.ts"
+```
+
+Read the found file. Map which components call which methods on which other components — these become the component-level relationships in Pass 4.
+
+**Output of Pass 3:** `{ module_edges, table_reads, table_writes, pipeline_dag, pipeline_confidence, components, contracts, component_relationships }`.
 
 ---
 
@@ -267,46 +325,107 @@ If module A imports module B, A is downstream of B. Derive a soft DAG from impor
 
 ### Proposed `.c4` Output
 
-Group by tier. AMBIGUOUS items are commented stubs with explicit questions.
+The specification block must declare the element kinds used. Always include `component` and `contract` when Pass 3c found them.
+
+```
+specification {
+  element actor
+  element system
+  element service
+  element component   // a primary class within a service
+  element contract    // a typed interface that crosses a module boundary
+  element datastore
+
+  relationship reads
+  relationship writes
+  relationship instantiates
+  relationship emits
+  relationship provides
+  relationship subscribes
+  relationship implements
+  relationship uses
+}
+```
+
+Group proposed elements by tier. AMBIGUOUS items are commented stubs with explicit questions.
 
 ```
 // ── STRUCTURAL (auto-stageable) ──────────────────────────────────
-softwareSystem acme "Acme Platform" {
-  container db "PostgreSQL" "Stores pricing records" {
-    technology "PostgreSQL 15"
+system acme "Acme" {
+  service ingestor "Ingestor" {
+    technology "Python"
+
+    component pipeline "Pipeline" {         // export class Pipeline in pipeline.py
+      description "Orchestrates the ingest cycle."
+    }
+
+    contract recordPacket "RecordPacket" {  // defined in types.py, consumed by Transformer
+      description "Typed payload emitted after each ingest step."
+    }
   }
-  container ingest_bucket "S3: raw-manifests" {
-    technology "S3"
+
+  datastore db "PostgreSQL" {
+    technology "PostgreSQL 15"
   }
 }
 
 // ── PROVABLE (auto-stageable) ─────────────────────────────────────
-// ingestor imports boto3 and references 'raw-manifests' bucket by name
-relationship ingestor -> ingest_bucket "reads raw manifests from"
+// pipeline.py imports boto3 and references 'raw-manifests' bucket by name
+ingestor.pipeline -> ingest_bucket "reads raw manifests"
+// transformer/types.py imports RecordPacket from ingestor/types.py
+ingestor.recordPacket -> transformer "consumed by"
 
 // ── INFERRED (confirm before staging) ────────────────────────────
 // confidence: 0.75 — directory named 'transform/' imports from 'ingest/'
-// suggesting downstream processing. Confirm: is transform/ a separate service
-// or part of the same process?
-container transformer "Transform Service" {
-  ...
-}
+// Confirm: is transform/ a separate service or part of the same process?
+service transformer "Transform Service" { ... }
 
 // ── AMBIGUOUS (needs your input) ─────────────────────────────────
 // Q: What is the data classification for the records table?
-// Q: Who owns the api container?
-// Q: Is there a user-facing API, or is this pipeline internal-only?
+// Q: Who owns the ingestor service?
 ```
 
-### Pipeline View
+### Views to Propose
 
-If a pipeline DAG was found or inferred, propose a dedicated LikeC4 view:
+Always propose these four views. Add extras for any focused concern worth isolating.
 
 ```
-view pipeline_flow {
-  title "Data Pipeline — [stage count] stages"
-  include ingestor, transformer, loader, db, ingest_bucket
-  // stage ordering derived from [orchestrator type / import graph]
+view index {
+  title "[system] — System Overview"
+  include *                          // all elements, components nested inside services
+}
+
+view context {
+  title "[system] — Context"
+  include actor, system              // system as opaque box; no services or components
+  exclude system.*
+  autoLayout LeftRight
+}
+
+view services {
+  title "[system] — Services"
+  include system, system.serviceA, system.serviceB, ...   // services only, no components
+  autoLayout TopBottom
+}
+
+view pipeline {
+  title "[system] — Runtime Pipeline"
+  // show the orchestration component and what it calls
+  include system.integration.pipeline
+  include system.moduleA.contract
+  include system.moduleB.impl
+  ...
+  autoLayout LeftRight
+}
+```
+
+If contracts were found, also propose:
+
+```
+view contracts {
+  title "[system] — Cross-Module Contracts"
+  include system.moduleA.contractX, system.moduleB.contractY, ...
+  autoLayout TopBottom
 }
 ```
 
