@@ -293,6 +293,27 @@ Read each types/interfaces file. For each interface or protocol:
 - Is it consumed by a different module than the one that defines it? → it's a **cross-module contract** (`contract` element, STRUCTURAL if the import is verifiable)
 - Is it only used internally? → skip (internal detail, not worth modeling)
 
+**Find specification contracts — design-time interface layers:**
+
+If the target contains `specs/*/contracts/` directories (e.g. `specs/001-mapper/contracts/`, `specs/002-telemetry/contracts/`), detect them:
+
+```bash
+find TARGET_PATH/specs -type d -name contracts | while read dir; do
+  module_num=$(echo "$dir" | sed -E 's|.*/specs/([0-9]+)-.*|\1|')
+  module_name=$(echo "$dir" | sed -E 's|.*/specs/[0-9]+-([^/]+)/.*|\1|')
+  echo "$module_num:$module_name"
+done | sort
+```
+
+For each spec directory found:
+- Spec is a design-time constraint layer distinct from runtime `component` and `contract` elements.
+- If the target is a TypeScript project with module-based structure, these indicate formal interface specifications.
+- Propose `spec` element kind and `defines` relationship kind in the specification block.
+- Propose one `spec` element per module (e.g., `contractSpecs.mapperSpec`, `contractSpecs.telemetrySpec`).
+- Link specs to their governed services with `defines` relationships.
+
+Confidence: spec directory exists = STRUCTURAL. Mapping to module = PROVABLE if the spec path pattern matches module numbering.
+
 **Find the runtime wiring — the orchestration class:**
 
 Look for a class that holds references to all other modules and drives the lifecycle. Names like `Pipeline`, `Coordinator`, `Runner`, `Orchestrator`, `App`, `Integration`. Read it fully — this reveals the actual component-level relationships (which class calls which method on which other class).
@@ -325,7 +346,7 @@ Read the found file. Map which components call which methods on which other comp
 
 ### Proposed `.c4` Output
 
-The specification block must declare the element kinds used. Always include `component` and `contract` when Pass 3c found them.
+The specification block must declare the element kinds used. Always include `component` and `contract` when Pass 3c found them. Include `spec` and `defines` if `specs/*/contracts/` directories were detected.
 
 ```
 specification {
@@ -334,6 +355,7 @@ specification {
   element service
   element component   // a primary class within a service
   element contract    // a typed interface that crosses a module boundary
+  element spec        // design-time constraint layer (optional, if specs/*/contracts/ found)
   element datastore
 
   relationship reads
@@ -344,6 +366,7 @@ specification {
   relationship subscribes
   relationship implements
   relationship uses
+  relationship defines // links spec to governed service or contract (optional, if specs/*/contracts/ found)
 }
 ```
 
@@ -427,6 +450,29 @@ view contracts {
   include system.moduleA.contractX, system.moduleB.contractY, ...
   autoLayout TopBottom
 }
+```
+
+If spec contracts were found (`specs/*/contracts/` directories), also propose:
+
+```
+view specLayer {
+  title "[system] — Specification Layer"
+  include system.contractSpecs
+  include system.contractSpecs.*
+  include system.service1, system.service2, ...  // all governed services
+  autoLayout TopBottom
+}
+
+view service1Spec {
+  title "[system] — Service1 Spec Blast Radius"
+  include system.contractSpecs.service1Spec
+  include system.service1
+  include system.service1.contractA
+  include system.service2.component  // consuming component example
+  autoLayout TopBottom
+}
+
+// Repeat per-spec view for each module spec
 ```
 
 ---
