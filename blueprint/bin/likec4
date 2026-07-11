@@ -1,0 +1,20 @@
+#!/bin/sh
+# Wrapper around the likec4 CLI that strips AI-provider API keys from the
+# environment before launching it.
+#
+# likec4 auto-enables an AI chat panel when it detects a provider key
+# (OPENROUTER_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, or
+# OLLAMA_HOST) and dynamically loads the matching @tanstack/ai-* package.
+# Those packages are pre-1.0 and iterate fast, so a version already sitting
+# in node_modules can be newer than the range likec4 expects, breaking the
+# dev server. Since this project doesn't use the AI chat panel, keep it off.
+#
+# `env -u` only affects the likec4 subprocess below — it does not touch
+# your shell or any other tool (e.g. an AI CLI) reading the same variable.
+exec env \
+  -u OPENROUTER_API_KEY \
+  -u OPENAI_API_KEY \
+  -u ANTHROPIC_API_KEY \
+  -u GEMINI_API_KEY \
+  -u OLLAMA_HOST \
+  npx likec4 "$@"
