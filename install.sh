@@ -92,7 +92,6 @@ fi
 
 printf '\nDone: %d copied, %d skipped.\n\n' "$copied" "$skipped"
 printf 'Next steps:\n'
-printf '  1. npm install -g likec4        # if not already installed\n'
-printf '  2. cd %s/blueprint/model && ../bin/likec4 serve\n' "$TARGET_DIR"
-printf '  3. Run /assessment . from your project root to model the existing system\n'
+printf '  1. cd %s/blueprint/model && ../bin/likec4 serve\n' "$TARGET_DIR"
+printf '  2. Run /assessment . from your project root to model the existing system\n'
 printf '     (or /blueprint-change for greenfield). See QUICKSTART.md in the toolkit repo.\n'

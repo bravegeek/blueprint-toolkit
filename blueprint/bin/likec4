@@ -1,20 +1,28 @@
 #!/bin/sh
-# Wrapper around the likec4 CLI that strips AI-provider API keys from the
-# environment before launching it.
+# Wrapper around the likec4 CLI that works around two upstream issues hit
+# when running via plain `npx likec4`:
 #
-# likec4 auto-enables an AI chat panel when it detects a provider key
-# (OPENROUTER_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, or
-# OLLAMA_HOST) and dynamically loads the matching @tanstack/ai-* package.
-# Those packages are pre-1.0 and iterate fast, so a version already sitting
-# in node_modules can be newer than the range likec4 expects, breaking the
-# dev server. Since this project doesn't use the AI chat panel, keep it off.
+# 1. likec4 auto-enables an AI chat panel when it detects a provider key
+#    (OPENROUTER_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY,
+#    or OLLAMA_HOST) and dynamically loads the matching @tanstack/ai-*
+#    package. Those packages are pre-1.0 and iterate fast, so a version
+#    already sitting in node_modules can be newer than the range likec4
+#    expects, breaking the dev server. `env -u` strips the keys for this
+#    subprocess only — it does not touch your shell or any other tool
+#    (e.g. an AI CLI) reading the same variable.
 #
-# `env -u` only affects the likec4 subprocess below — it does not touch
-# your shell or any other tool (e.g. an AI CLI) reading the same variable.
+# 2. vite 8.1.x has a dependency pre-bundling regression: it misparses a
+#    class method literally named `import()` (from the `graphology` graph
+#    library used inside @likec4/core) as a dynamic import() call and
+#    corrupts it, breaking every view (blank white page). vite 8.0.14 does
+#    not have this bug. Pinning `-p vite@8.0.14` alongside `-p likec4` in
+#    the same npx install forces npm to dedupe likec4's `vite: ^8.0.14`
+#    dependency to that known-good version instead of whatever is newest
+#    at install time.
 exec env \
   -u OPENROUTER_API_KEY \
   -u OPENAI_API_KEY \
   -u ANTHROPIC_API_KEY \
   -u GEMINI_API_KEY \
   -u OLLAMA_HOST \
-  npx likec4 "$@"
+  npx --yes -p likec4 -p vite@8.0.14 likec4 "$@"

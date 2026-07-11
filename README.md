@@ -18,10 +18,12 @@ blueprint-toolkit/
 │   ├── assessment/        # Read system → propose .c4 model
 │   └── blueprint-change/  # Ticket → EARS → .c4 diff → review gate
 ├── blueprint/
-│   └── model/
-│       ├── system.c4      # Element specification + model
-│       ├── views.c4       # View definitions
-│       └── .likec4rc      # LikeC4 project config
+│   ├── model/
+│   │   ├── system.c4      # Element specification + model
+│   │   ├── views.c4       # View definitions
+│   │   └── .likec4rc      # LikeC4 project config
+│   └── bin/
+│       └── likec4         # Wrapper: run this instead of `likec4` directly
 ├── AGENTS.md              # What agents read
 ├── .mcp.json              # LikeC4 MCP (read-only)
 ├── install.sh             # Copies the above into your project

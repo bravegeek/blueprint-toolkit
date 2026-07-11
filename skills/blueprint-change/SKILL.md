@@ -101,7 +101,7 @@ Leave `owner`, `dataClassification`, and `auth` as comments with `?` if they can
 Tell the developer:
 
 ```
-Run `likec4 serve` in the blueprint/model/ directory (or it may already be running).
+Run `../bin/likec4 serve` from the blueprint/model/ directory (or it may already be running).
 Open the browser and look at the [view name] view.
 Changed elements are highlighted.
 

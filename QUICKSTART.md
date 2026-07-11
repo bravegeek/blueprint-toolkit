@@ -5,11 +5,9 @@
 ```bash
 # Node 20+
 node --version   # must be >= 20
-
-# LikeC4 CLI
-npm install -g likec4
-likec4 --version
 ```
+
+You don't need to install the LikeC4 CLI yourself — `blueprint/bin/likec4` (installed below) runs it via `npx` with a pinned, known-good version, and no other setup.
 
 You also need an agent that reads `AGENTS.md` — Claude Code, Cursor, opencode, Amp, or any compatible tool. Add whatever config file your tool needs (e.g. `CLAUDE.md`) pointing at `AGENTS.md`.
 
@@ -27,10 +25,12 @@ The script copies everything below into the target, sets the project name in `.l
 your-project/
 ├── src/                  ← your code
 ├── blueprint/
-│   └── model/
-│       ├── system.c4
-│       ├── views.c4
-│       └── .likec4rc
+│   ├── model/
+│   │   ├── system.c4
+│   │   ├── views.c4
+│   │   └── .likec4rc
+│   └── bin/
+│       └── likec4        ← always run LikeC4 through this, not a bare `likec4`
 ├── skills/
 │   ├── assessment/
 │   └── blueprint-change/
@@ -38,12 +38,12 @@ your-project/
 └── .mcp.json
 ```
 
-**2.** (Manual install only) Copy the tree above yourself and set `name` in `blueprint/model/.likec4rc`.
+**2.** (Manual install only) Copy the tree above yourself, set `name` in `blueprint/model/.likec4rc`, and `chmod +x blueprint/bin/likec4`.
 
 **3. Preview the empty model:**
 
 ```bash
-cd blueprint/model && likec4 serve
+cd blueprint/model && ../bin/likec4 serve
 ```
 
 Open the URL it prints. An empty diagram means it's working.
@@ -80,7 +80,7 @@ Once you have a model, every change follows this loop:
 2. /blueprint-change <description>
       AI loads model → writes EARS requirements → proposes .c4 diff
       ↓
-3. Review the diagram (likec4 serve is already running)
+3. Review the diagram (blueprint/bin/likec4 serve is already running)
       Approve → continue   |   Correct → revise in conversation
       ↓
 4. Commit the approved .c4 diff
@@ -96,5 +96,6 @@ Skip `/assessment`. Run `/blueprint-change` with a description of the system. Th
 
 ## Tips
 
-- `likec4 serve` watches for file changes — leave it running while you work.
+- `blueprint/bin/likec4 serve` watches for file changes — leave it running while you work.
+- Always run LikeC4 via `blueprint/bin/likec4`, not a bare `likec4`/`npx likec4` — see the comments in that script for why (an AI-chat auto-enable footgun and a vite dependency pre-bundling bug in newer patch versions).
 - The MCP server (`.mcp.json`) lets agents query the model without reading files directly.

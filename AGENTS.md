@@ -36,4 +36,9 @@ Never write `.c4` files directly. All model changes go through `/blueprint-chang
 | `blueprint/model/system.c4` | Element specification + model |
 | `blueprint/model/views.c4` | LikeC4 view definitions |
 | `blueprint/model/.likec4rc` | LikeC4 project config |
+| `blueprint/bin/likec4` | Wrapper CLI — always use this instead of a bare `likec4`/`npx likec4` |
 | `.mcp.json` | LikeC4 MCP server — read-only model query |
+
+## Running LikeC4
+
+Always launch LikeC4 via `blueprint/bin/likec4` (e.g. `blueprint/bin/likec4 serve` from the project root, or `../bin/likec4 serve` from `blueprint/model/`), never a bare `likec4` or `npx likec4`. The wrapper strips AI-provider env vars (which would otherwise auto-enable an unused, version-fragile AI chat panel) and pins a known-good `vite` version (newer patches have a dependency pre-bundling bug that breaks rendering — see the wrapper's comments). This applies to agents running LikeC4 on the user's behalf too.
