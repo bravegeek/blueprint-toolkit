@@ -15,24 +15,30 @@ You also need an agent that reads `AGENTS.md` — Claude Code, Cursor, opencode,
 
 ## Setup
 
-**1. Copy this toolkit into your project:**
+**1. Install the toolkit into your project:**
+
+```bash
+./install.sh /path/to/your-project [project-name]
+```
+
+The script copies everything below into the target, sets the project name in `.likec4rc` (prompting if you didn't pass one), and never overwrites existing files — re-running is safe.
 
 ```
 your-project/
 ├── src/                  ← your code
-├── blueprint/            ← paste here
+├── blueprint/
 │   └── model/
 │       ├── system.c4
 │       ├── views.c4
 │       └── .likec4rc
-├── skills/               ← paste here
+├── skills/
 │   ├── assessment/
 │   └── blueprint-change/
-├── AGENTS.md             ← paste here
-└── .mcp.json             ← paste here
+├── AGENTS.md
+└── .mcp.json
 ```
 
-**2. Update `blueprint/model/.likec4rc`** — set `name` to something meaningful for your project.
+**2.** (Manual install only) Copy the tree above yourself and set `name` in `blueprint/model/.likec4rc`.
 
 **3. Preview the empty model:**
 

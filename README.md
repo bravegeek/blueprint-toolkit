@@ -24,12 +24,17 @@ blueprint-toolkit/
 │       └── .likec4rc      # LikeC4 project config
 ├── AGENTS.md              # What agents read
 ├── .mcp.json              # LikeC4 MCP (read-only)
+├── install.sh             # Copies the above into your project
 └── QUICKSTART.md
 ```
 
 ## How To Use It
 
-Copy this into your project and point it at your code. See `QUICKSTART.md`.
+```bash
+./install.sh /path/to/your-project
+```
+
+Then point it at your code. See `QUICKSTART.md`.
 
 ## The One Rule
 

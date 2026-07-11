@@ -16,7 +16,7 @@ The blueprint layer exists so a human reviews a *diagram*, not code. This skill 
 
 ```
 ticket / description
-  → load current model (via MCP or by reading model/*.c4)
+  → load current model (via MCP or by reading blueprint/model/*.c4)
   → EARS requirements
   → proposed .c4 diff
   → human reviews the rendered diagram
@@ -44,7 +44,7 @@ Derive a short kebab-case name for the change (e.g. "add rate export endpoint" �
 - All relationships
 - Existing views
 
-**Fallback (if MCP unavailable):** read `model/system.c4` and `model/views.c4` directly.
+**Fallback (if MCP unavailable):** read `blueprint/model/system.c4` and `blueprint/model/views.c4` directly.
 
 Build a mental map: what elements exist, what relationships are defined, what views are present. This is ground truth — never invent elements that aren't in the model.
 
@@ -101,7 +101,7 @@ Leave `owner`, `dataClassification`, and `auth` as comments with `?` if they can
 Tell the developer:
 
 ```
-Run `likec4 serve` in the model/ directory (or it may already be running).
+Run `likec4 serve` in the blueprint/model/ directory (or it may already be running).
 Open the browser and look at the [view name] view.
 Changed elements are highlighted.
 
@@ -126,4 +126,4 @@ Does the diagram look right?
 - Never write `blueprint/model/*.c4` files directly. The diff is a proposal only — the developer commits it.
 - Never generate `design.md`, `tasks.md`, or code before approval.
 - `dataClassification` and `auth` are always AMBIGUOUS — always leave as `?` for developer input.
-- If the MCP server is unavailable and `model/system.c4` is empty, say so and suggest running `/assessment` first.
+- If the MCP server is unavailable and `blueprint/model/system.c4` is empty, say so and suggest running `/assessment` first.
