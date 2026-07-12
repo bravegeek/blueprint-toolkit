@@ -64,51 +64,59 @@ After the four passes: **Confirm** — present only INFERRED and AMBIGUOUS items
 
 ## Code-Level Extraction Format
 
-Pass 3c produces a language-neutral intermediate extraction document (JSON) that decouples *how structure is discovered* (LLM reading, future AST tools) from *how it is modeled* (in .c4 elements). This format is the swap point: when a deterministic AST extractor arrives, it emits the same format with STRUCTURAL/PROVABLE confidence, and no downstream changes are needed.
+Pass 3c produces a language-neutral intermediate extraction document (JSON) that decouples *how structure is discovered* (LLM reading, deterministic AST tools, framework recipes) from *how it is modeled* (in .c4 elements). This format is the swap point: when deterministic extractors arrive, they emit the same format with PROVABLE confidence, and no downstream changes are needed.
+
+**Multiple sources**: When multiple extraction sources run (e.g., `tsserver` for deterministic TypeScript resolution + `llm-nextjs` for framework-implicit Next.js wiring), each produces its own extraction JSON. They are unioned (AND, not OR — all sources run, not fallback) over *disjoint fact sets*. The `source` field records provenance so Pass 4 can attribute every fact.
 
 **Format (JSON):**
 
 ```json
 {
-  "source": "llm-assessment",      // or "ast-<tool>" for future extractors
-  "language": "python",             // language analyzed
+  "source": "tsserver",             // provenance: "tsserver" | "llm-nextjs" | "llm-assessment" | other
+  "language": "typescript",          // language analyzed
   "components": [
     {
-      "symbol": "PipelineRunner",
-      "file": "src/pipeline/runner.py",
-      "module": "pipeline",
+      "symbol": "ApiHandler",
+      "file": "src/pages/api/rooms.ts",
+      "module": "api",
       "exported": true,             // exported/public
-      "confidence": "INFERRED"       // INFERRED from LLM reading, STRUCTURAL for AST
+      "confidence": "PROVABLE"      // PROVABLE from deterministic resolution, INFERRED from LLM reading
     }
   ],
   "contracts": [
     {
       "symbol": "StorageBackend",
-      "file": "src/storage/base.py",
-      "kind": "protocol",            // protocol, interface, abc, or type
+      "file": "src/storage/base.ts",
+      "kind": "interface",           // interface, protocol, type, etc.
       "confidence": "PROVABLE",
-      "evidence": "src/storage/client.py:42 imports StorageBackend"  // quoted evidence for PROVABLE
+      "evidence": "src/storage/client.ts:42 imports StorageBackend"  // file:line for PROVABLE
     }
   ],
   "edges": [
     {
-      "from": "PipelineRunner",
+      "from": "ApiHandler",
       "to": "StorageBackend",
-      "kind": "implements",          // implements, calls, instantiates, etc.
+      "kind": "instantiates",        // implements, calls, instantiates, fetches, routes, handles, etc.
       "confidence": "PROVABLE",
-      "evidence": "src/pipeline/runner.py:42 instantiates StorageBackend"
+      "evidence": "src/pages/api/rooms.ts:18 new StorageBackend()"
     }
   ]
 }
 ```
 
-**Confidence rules:**
-- INFERRED: LLM-identified components and patterns (default for LLM reading). Requires developer confirmation.
-- PROVABLE: Direct code evidence (inheritance, type annotation, import + usage, instantiation). Requires quoted file:line in `evidence` field.
-- STRUCTURAL: Reserved for AST extractors; not used by LLM assessment.
-- All untagged entries must have an explicit confidence tier.
+**Confidence by construction**:
+- `tsserver` source → all facts are `PROVABLE` (compiler resolved them) with `evidence` containing `file:line`.
+- `llm-nextjs` and `llm-assessment` sources → all facts are `INFERRED` (convention-based or LLM inference) and may lack `evidence`.
+- Confidence is a property of the *source* that produced a fact, not self-reported per-fact.
 
-**Pass 4 synthesis** reads this format, matches entries by `sourceLocation` (file + symbol), and generates `.c4` elements with `#inferred` or `#provable` tags.
+**Disjoint fact sets**:
+- `tsserver` owns compiler-resolvable edges: imports, call hierarchy, `implements` relationships.
+- `llm-nextjs` owns framework-implicit edges: file-system routes, route handlers, client→API fetches, `'use client'` boundaries, auth wiring.
+- The recipe is scoped to prevent emitting edges `tsserver` already owns, so the union has no overlap.
+
+**No-leak rule**: Source-specific richness (tsserver's quickinfo, type strings, URI/range objects; LLM confidence hints; recipe reasoning traces) is mapped to format fields or dropped entirely. Nothing past the JSON boundary reaches Pass 4 or the `.c4` model.
+
+**Pass 4 synthesis** reads the extraction format, unions all sources, matches entries by `sourceLocation` (file + symbol), and generates `.c4` elements with `#provable` (for tsserver) or `#inferred` (for recipes) tags.
 
 ---
 
@@ -364,6 +372,62 @@ For each spec directory found:
 - Confidence: directory existence = STRUCTURAL.
 - Do not fail Pass 3c if no specs are found; defer spec emission to Pass 4 conditional logic.
 
+#### Next.js Framework Discovery (if project is detected as Next.js)
+
+If Pass 1 detected Next.js (via `next.config.js`, `package.json` with `next` dependency, or `app/` directory structure), run this LLM recipe to extract framework-implicit wiring the type system cannot resolve.
+
+**File-system routes** (`app/**/page.tsx` → route path):
+- Walk the `app/` directory hierarchy.
+- For each `page.tsx` file, infer the HTTP route path from the directory structure.
+  - `app/game/[id]/page.tsx` → `/game/:id`
+  - `app/api/rooms/route.ts` is handled separately (see route handlers below).
+- Emit as components with `kind: "route"` and `confidence: INFERRED`.
+
+**Route handlers** (`route.ts` → HTTP endpoint):
+- Find all `route.ts` files in the `app/` tree.
+- Each `route.ts` file defines an HTTP endpoint at the path corresponding to its directory.
+  - `app/api/rooms/route.ts` → `POST /api/rooms`, `GET /api/rooms` (handler defines which methods).
+- Extract the HTTP methods defined in the file (`export async function GET(...)`, `export async function POST(...)`, etc.).
+- Emit as components with `kind: "handler"` and `confidence: INFERRED`.
+
+**Client→API edges** (client `fetch('/api/...')` → handler):
+- Scan for `fetch(...)` and `fetch.post(...)` calls in client components.
+- Extract the URL string (e.g., `fetch('/api/rooms')`).
+- Match against the routes from the handler extraction step.
+- Emit an edge from the caller to the matching handler with `kind: "fetches"` and `confidence: INFERRED`.
+
+**Server/client boundary** (`'use client'` directives):
+- Identify files with `'use client'` at the top level.
+- For each such file, track modules and components as client-side.
+- Identify which components are used by both client and server contexts (cross-boundary usage).
+- Emit boundary-crossing facts with `kind: "crosses"` and `confidence: INFERRED`.
+
+**Auth wiring** (next-auth integration):
+- Scan for `next-auth` usage (presence of `auth.ts`, `route.ts` in `app/api/auth/[...nextauth]/`, NextAuth imports).
+- Identify API route handlers that check auth (via `getSession()`, `useSession()`, middleware patterns).
+- Emit auth-related edges with `kind: "authenticates"` and `confidence: INFERRED`.
+
+**Disjointness enforcement**: The recipe MUST NOT emit any edge that is compiler-resolvable (plain imports, direct function calls, `implements` relationships). Those belong to the `tsserver` source. If an edge could plausibly be resolved by the type system, exclude it from the recipe output.
+
+**Output of Next.js recipe**:
+
+Emit a JSON file following the extraction format with `source: "llm-nextjs"`:
+
+```json
+{
+  "source": "llm-nextjs",
+  "language": "typescript",
+  "components": [
+    { "symbol": "/game/:id", "file": "app/game/[id]/page.tsx", "kind": "route", "confidence": "INFERRED" },
+    { "symbol": "POST /api/rooms", "file": "app/api/rooms/route.ts", "kind": "handler", "confidence": "INFERRED" }
+  ],
+  "contracts": [],
+  "edges": [
+    { "from": "components/GameBoard", "to": "POST /api/rooms", "kind": "fetches", "confidence": "INFERRED" }
+  ]
+}
+```
+
 **Orchestration wiring** (component-level relationships):
 
 Look for the runtime wiring class: `Pipeline`, `Coordinator`, `Runner`, `Orchestrator`, `App`, `Integration`.
@@ -413,19 +477,14 @@ Look for the runtime wiring class by name and read its full method bodies to ext
 
 #### Output of Pass 3c
 
-Emit a single JSON file containing the extracted format:
+Each extraction source emits its own JSON file conforming to the format above, with `source` set to the extraction tool's identifier. The skill's internal logic unions all available sources:
+- Always run the default LLM extraction (`source: "llm-assessment"`).
+- If the project is warm (has a type system installed), run deterministic extractors (e.g., `source: "tsserver"` for TypeScript).
+- If the project is detected as a Next.js app, run the framework recipe (`source: "llm-nextjs"`).
 
-```json
-{
-  "source": "llm-assessment",
-  "language": "python",
-  "components": [ ... ],
-  "contracts": [ ... ],
-  "edges": [ ... ]
-}
-```
+The union is over disjoint fact sets (AND, not OR — all present sources contribute, no fallback). **Pass 4 consumes the complete unioned output.**
 
-Save this as `_codeLevelExtraction.json` in the project root or as an intermediate artifact. **Pass 4 consumes only this format.**
+Individual source outputs may be saved as intermediate artifacts (e.g., `_extraction_tsserver.json`, `_extraction_recipe.json`), but the definitive input to Pass 4 is their union.
 
 **Specification-layer contracts** (conditional):
 
@@ -450,23 +509,25 @@ For each spec directory found:
 
 ### Code-level element synthesis (from extraction format)
 
-**Input:** `_codeLevelExtraction.json` from Pass 3c (or an empty extraction if no components/contracts found).
+**Input:** Unioned extraction JSON from Pass 3c containing contributions from all available sources (e.g., `source: "tsserver"`, `source: "llm-nextjs"`, `source: "llm-assessment"`).
 
 **Processing:**
 
 1. **Match on sourceLocation**: For each component/contract in the extraction, check if an element with matching `sourceLocation` metadata already exists in the model. If it does, update it (re-assessment scenario, no duplication). If it doesn't, add it.
 
-2. **Nesting**: Nest all `component` and `contract` elements under their parent `service` (inferred from Pass 1's service mapping).
+2. **Source attribution**: Each element carries provenance in its `source` field. Use this to determine confidence and to debug any overlaps (the union should be over disjoint fact sets, so overlaps are errors to investigate).
 
-3. **Confidence → tags**: For each element:
-   - If confidence is `INFERRED` → add `#inferred` tag.
-   - If confidence is `PROVABLE` → add `#provable` tag.
+3. **Nesting**: Nest all `component` and `contract` elements under their parent `service` (inferred from Pass 1's service mapping).
+
+4. **Confidence → tags**: For each element:
+   - If confidence is `PROVABLE` → add `#provable` tag (from deterministic resolution).
+   - If confidence is `INFERRED` → add `#inferred` tag (from LLM or recipe inference).
    - Do not tag unconfirmed items; those stay for developer review.
    - Tag syntax: `#tagName` must be the *first* statement(s) inside the element's brace body, one per line (or comma-separated) — never inline after the title, and never after `description`/`metadata`. There is no `tags` keyword. E.g. `component pipeline "Pipeline" { #provable ... }`, not `component pipeline "Pipeline" #provable { ... }`.
 
-4. **Metadata**: Add `sourceLocation` metadata: `metadata { sourceLocation '<repo-relative-path>#<SymbolName>' }`.
+5. **Metadata**: Add `sourceLocation` metadata: `metadata { sourceLocation '<repo-relative-path>#<SymbolName>' }`. Include source attribution if debugging: `metadata { sourceLocation '<repo-relative-path>#<SymbolName>', source '<source-id>' }`.
 
-5. **Cross-module evidence filter**: Drop any component or contract entry from the extraction if it has no cross-module evidence (e.g., a component that is never imported outside its module, a protocol only used internally). These are implementation details, not structural elements.
+6. **Cross-module evidence filter**: Drop any component or contract entry from the extraction if it has no cross-module evidence (e.g., a component that is never imported outside its module, a protocol only used internally). These are implementation details, not structural elements.
 
 **Example output (from extraction):**
 
