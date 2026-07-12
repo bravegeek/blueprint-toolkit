@@ -85,7 +85,10 @@ if [ "$CLEAN" -eq 1 ]; then
     fi
   fi
 
-  BACKUP_DIR="$TARGET_DIR/blueprint/model/.backup/$(date +%Y%m%d-%H%M%S)"
+  # Must live outside blueprint/model/ — that's the LikeC4 workspace root, and
+  # a backup .c4 file left inside it gets globbed too, causing duplicate
+  # element definitions on the next `likec4 validate`.
+  BACKUP_DIR="$TARGET_DIR/blueprint/.backup/$(date +%Y%m%d-%H%M%S)"
   mkdir -p "$BACKUP_DIR"
   cp "$SYS_C4" "$BACKUP_DIR/system.c4"
   [ -f "$VIEWS_C4" ] && cp "$VIEWS_C4" "$BACKUP_DIR/views.c4"

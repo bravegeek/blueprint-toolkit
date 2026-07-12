@@ -14,23 +14,11 @@ Read the actual system state in four passes, propose a LikeC4 model with confide
 
 ## Tooling Conventions
 
-Create or edit `.c4` file content directly (whatever your file-write capability is), never by piping a shell heredoc into `cat`/`tee`. LikeC4 syntax is full of `{ }` blocks and quoted strings, and shell heredocs of that shape routinely (and falsely) get flagged as command obfuscation, forcing a manual approval per file. A shell command should only ever be `likec4 validate <path>` or similar — never the thing creating the `.c4` content.
+**No CLI validation during Passes 1–3 or mid-synthesis. None.** Do not run `likec4 validate` (or `likec4 serve`, `likec4 build`, etc.) against any scratch file, test snippet, or partial draft while working through the passes — not to "check a construct works," not to "confirm base syntax," not for any reason. There is exactly one validation point in this skill: after Pass 4 produces the complete proposed `.c4` diff, write it into the real target files (`blueprint/model/system.c4` / `views.c4`) through your normal file-editing capability, and run `likec4 validate` against that real path once. If it fails, fix the file in place and validate again — still never a scratch file, never a heredoc.
 
-**Wrong:**
-```
-cat > /tmp/test.c4 <<'EOF'
-specification { element system }
-model { system sys { title 'Sys' } }
-EOF
-likec4 validate /tmp/test.c4
-```
+This means no `/tmp/*.c4` files, ever, for any purpose, at any point in this skill.
 
-**Right:** write the file directly through your editing capability, then shell out only to validate:
-```
-likec4 validate /tmp/test.c4
-```
-
-**Don't empirically test syntax at all if you can avoid it.** Before writing any throwaway file to "check" how a construct works, look at `blueprint/model/system.c4`, `blueprint/model/views.c4`, and the worked examples already in `skills/*/SKILL.md` — they cover element declarations, nesting, relationships, and tag usage (`#tagName` as the first statement inside an element's body, declared once in `specification`, never inline after the title and never a `tags` keyword). If the answer isn't there, check `AGENTS.md`'s LikeC4 Syntax Quick Reference. Only fall back to a scratch-file experiment if none of the above answers it, and even then write the file directly rather than through a heredoc.
+Syntax questions get answered by reading, not by running anything: `blueprint/model/system.c4`, `blueprint/model/views.c4`, and the worked examples in `skills/*/SKILL.md` cover element declarations, nesting, relationships, and tag usage (`#tagName` as the first statement inside an element's body, declared once in `specification`, never inline after the title and never a `tags` keyword). If those don't answer it, check `AGENTS.md`'s LikeC4 Syntax Quick Reference. If none of that answers it, make your best-effort attempt in the real proposed diff and let the single end-of-Pass-4 validation catch it — do not spin up a side experiment to find out first.
 
 ---
 
@@ -55,6 +43,7 @@ STRUCTURAL and PROVABLE → auto-stageable. INFERRED → brief confirmation. AMB
 - Guess business logic or domain rules
 - Infer behavior that has no artifact backing it
 - Assign `dataClassification` or `auth` without developer confirmation (always AMBIGUOUS)
+- Read, restore from, or otherwise use `blueprint/.backup/` (or any prior `.c4` backup) as source material. It exists solely so a human can manually recover an old model after `install.sh --clean` — it is not an assessment shortcut. Every run derives elements from the current codebase only, from scratch, even if a backup looks "more thorough." If the developer wants an old backup restored, that is their call to make explicitly, not something to decide mid-assessment.
 
 ---
 

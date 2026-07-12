@@ -12,6 +12,7 @@ All skills live at `skills/<name>/SKILL.md`. Invoke them by name.
 |-------|-----------|-------------|
 | `assessment` | `/assessment [path]` | Read a running system's artifacts and propose an initial `.c4` model. Pass the path to the system (e.g. `/assessment .` from the project root). Never infers — only reads what exists. |
 | `blueprint-change` | `/blueprint-change [description]` | Turn a ticket or description into EARS requirements and a proposed `.c4` diff. Human reviews the rendered diagram before any code is written. |
+| `guided-brainstorm` | `/guided-brainstorm` | Guide users through structured brainstorming sessions using the Situation -> Advisor -> Conversation -> Plan framework. |
 
 ## The Loop
 

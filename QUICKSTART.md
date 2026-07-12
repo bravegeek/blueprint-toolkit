@@ -68,7 +68,7 @@ If a prior assessment came out wrong or incomplete and you want a clean re-run r
 ./install.sh --clean /path/to/your-project
 ```
 
-This resets `system.c4` and `views.c4` to the blank templates. It backs up the current files first (to `blueprint/model/.backup/<timestamp>/`, never just deletes them), then prompts for confirmation — pass `--yes` to skip the prompt in a non-interactive shell. Then run `/assessment .` again.
+This resets `system.c4` and `views.c4` to the blank templates. It backs up the current files first (to `blueprint/.backup/<timestamp>/`, never just deletes them), then prompts for confirmation — pass `--yes` to skip the prompt in a non-interactive shell. Then run `/assessment .` again.
 
 ## Standard Assessment Layers
 
