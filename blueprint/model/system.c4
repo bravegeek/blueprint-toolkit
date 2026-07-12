@@ -11,6 +11,11 @@ specification {
   element externalSystem   // third-party dependency outside the system boundary
   element infrastructure   // hosting, networking, runtime infrastructure
 
+  // ── Code-level modeling ────────────────────────────────────
+  element component        // a public/exported class or primary construct within a service
+  element contract         // a typed interface (protocol, abstract base, or interface) crossing module boundaries
+  element spec             // a specification-layer contract or design document reference
+
   // ── Relationship kinds ─────────────────────────────────────
   relationship calls
   relationship reads
@@ -19,14 +24,25 @@ specification {
   relationship fetches
   relationship uploads
   relationship claims
+  relationship defines     // a service/component defines a contract
+  relationship implements  // a component implements a contract
 
   // ── Tags (cross-cutting concerns) ──────────────────────────
   // Add project-specific tags here.
   tag deprecated { color #DC143C }
+  tag inferred  { color #FFB347 }   // confidence: inferred by LLM analysis, not directly verified
+  tag provable  { color #90EE90 }   // confidence: provable from code (direct evidence: import, call site, inheritance)
 
   // ── Recommended metadata fields ───────────────────────────
   // Consider adding `owner`, `dataClassification`, and `auth` to elements
   // where those are meaningful for your project.
+  //
+  // Code-level elements (component, contract, spec) use a special metadata field:
+  //   sourceLocation: <repo-relative-path>#<SymbolName>
+  // This maps the model to code: e.g., 'src/api/handlers.py#RequestHandler' or
+  // 'src/storage/protocols.ts#StorageBackend'. This is the join key for
+  // deterministic extraction (matching on sourceLocation instead of title) and
+  // enables future AST extractors to update elements in place without duplication.
 
   // ── Deployment Node kinds ──────────────────────────────────
   deploymentNode environment

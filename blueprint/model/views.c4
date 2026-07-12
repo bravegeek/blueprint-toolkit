@@ -7,4 +7,21 @@ views {
       opacity 30%
     }
   }
+
+  // ── Code-structure views ───────────────────────────────────
+  // Per-service view template showing components and contracts within a service.
+  // Rename/duplicate this view for each service with code-level modeling.
+  // Example: view codeStructure_myService { title 'My Service — Code Structure' ... }
+  //
+  // To use:
+  //   1. Copy this view template for each service.
+  //   2. Replace 'serviceName' with the actual service identifier.
+  //   3. The view includes all nested components and their cross-module contracts.
+  //
+  // view codeStructure_serviceName {
+  //   title 'Service Name — Code Structure'
+  //   include serviceName.** // includes all nested components and contracts
+  //   include serviceName->* // direct outbound relationships from the service
+  //   include *->serviceName // direct inbound relationships to the service
+  // }
 }

@@ -41,3 +41,14 @@ Then point it at your code. See `QUICKSTART.md`.
 ## The One Rule
 
 Never write `.c4` files directly. All model changes go through `/blueprint-change` so the human sees the diagram before anything is implemented.
+
+## Code-Level Modeling
+
+The toolkit models systems at two altitudes:
+
+- **Architecture level (C4 level 2):** services, datastores, queues, external systems.
+- **Code level:** exported classes (components) and typed interfaces crossing module boundaries (contracts) *within* each service.
+
+Code-level elements use `sourceLocation` metadata (`file#Symbol`) to map back to code. The `/assessment` skill extracts components and contracts in four passes, defaulting LLM-derived entries to INFERRED and requiring quoted evidence for PROVABLE. Proposed changes via `/blueprint-change` include a code-level diff when they add or modify components or contracts.
+
+**Scope:** only exported/public classes and cross-module contracts. Private helpers are permanently out of scope. This keeps the model size tractable and focused on structural integrity.

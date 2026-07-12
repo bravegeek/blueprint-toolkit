@@ -11,6 +11,16 @@
 # Portable across bash and zsh (`bash install.sh` / `zsh install.sh` both work).
 # Existing files in the target are never overwritten — they are skipped
 # with a warning so re-running is safe.
+#
+# Upgrading an existing project:
+# Re-run this script to install new or updated skills. If your project already
+# has `system.c4` and `views.c4`, they are skipped — you must manually merge
+# new specification blocks (new element/relationship kinds, tags, views) or
+# accept the current file and re-run only the skills.
+#
+# For additive upgrades (e.g., adding code-level element kinds), the specification
+# changes are backward-compatible: existing elements and views remain valid, and
+# new kinds are immediately available to use.
 
 set -eu
 

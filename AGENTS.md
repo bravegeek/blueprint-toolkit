@@ -29,15 +29,94 @@ describe the change or ticket
 
 Never write `.c4` files directly. All model changes go through `/blueprint-change` so the human reviews the rendered diagram first.
 
+## Element and Relationship Kinds
+
+The base specification includes code-level modeling alongside architecture-level elements:
+
+**Architecture-level (C4 level 2):**
+- `actor`, `system`, `service`, `script`, `datastore`, `bucket`, `queue`, `externalSystem`, `infrastructure`
+
+**Code-level (C4 level 3):**
+- `component` — an exported class or primary construct within a service
+- `contract` — a typed interface (protocol, abstract base, interface) crossing module boundaries
+- `spec` — a design-time specification-layer contract (optional, conditional on `specs/*/contracts/` directories)
+
+**Relationship kinds:**
+- Architecture-level: `calls`, `reads`, `writes`, `triggers`, `fetches`, `uploads`, `claims`
+- Code-level: `defines` (spec → service/contract), `implements` (component → contract)
+
+**Confidence tags:**
+- `#provable` — derivable with certainty from code artifacts (import statements, type hints, inheritance)
+- `#inferred` — pattern-matched by LLM (no direct code evidence)
+- No tag → confirmed by developer (no uncertainty)
+
+## Code-Level Extraction Format
+
+The `/assessment` skill's Pass 3c emits a JSON intermediate extraction format (the swap point for future AST extractors):
+
+```json
+{
+  "source": "llm-assessment",  // or "ast-<tool>" for future extractors
+  "language": "python",
+  "components": [
+    {
+      "symbol": "PipelineRunner",
+      "file": "src/pipeline/runner.py",
+      "module": "pipeline",
+      "exported": true,
+      "confidence": "INFERRED"
+    }
+  ],
+  "contracts": [
+    {
+      "symbol": "StorageBackend",
+      "file": "src/storage/base.py",
+      "kind": "protocol",
+      "confidence": "PROVABLE",
+      "evidence": "src/storage/client.py:42 imports StorageBackend"
+    }
+  ],
+  "edges": [
+    {
+      "from": "PipelineRunner",
+      "to": "StorageBackend",
+      "kind": "implements",
+      "confidence": "PROVABLE",
+      "evidence": "src/pipeline/runner.py:42 instantiates StorageBackend"
+    }
+  ]
+}
+```
+
+Pass 4 synthesis reads this format and generates `.c4` elements with `sourceLocation` metadata and confidence tags.
+
+## SourceLocation Metadata Convention
+
+Every code-level element carries a `sourceLocation` metadata field in the format `<repo-relative-path>#<SymbolName>`:
+
+```
+component pipeline "Pipeline" #provable {
+  metadata { sourceLocation "src/pipeline/runner.py#Pipeline" }
+}
+
+contract storageBackend "StorageBackend" #inferred {
+  metadata { sourceLocation "src/storage/base.py#StorageBackend" }
+}
+```
+
+This is the join key for deterministic extraction: when a future AST extractor or re-assessment run arrives, it matches on sourceLocation instead of title, ensuring update-in-place (no duplication) and stable identity across refactors.
+
 ## Key Files
 
 | Path | What it is |
 |------|-----------|
-| `blueprint/model/system.c4` | Element specification + model |
-| `blueprint/model/views.c4` | LikeC4 view definitions |
+| `blueprint/model/system.c4` | Element specification (architecture + code-level kinds) + model |
+| `blueprint/model/views.c4` | LikeC4 view definitions (includes `codeStructure` template) |
 | `blueprint/model/.likec4rc` | LikeC4 project config |
 | `blueprint/bin/likec4` | Wrapper CLI — always use this instead of a bare `likec4`/`npx likec4` |
 | `.mcp.json` | LikeC4 MCP server — read-only model query |
+| `skills/assessment/SKILL.md` | Four-pass system analysis with code-level extraction |
+| `skills/blueprint-change/SKILL.md` | Ticket → EARS → .c4 diff (includes code-level impact check) |
 
 ## Running LikeC4
 

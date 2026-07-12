@@ -51,6 +51,56 @@ After the four passes: **Confirm** — present only INFERRED and AMBIGUOUS items
 
 ---
 
+## Code-Level Extraction Format
+
+Pass 3c produces a language-neutral intermediate extraction document (JSON) that decouples *how structure is discovered* (LLM reading, future AST tools) from *how it is modeled* (in .c4 elements). This format is the swap point: when a deterministic AST extractor arrives, it emits the same format with STRUCTURAL/PROVABLE confidence, and no downstream changes are needed.
+
+**Format (JSON):**
+
+```json
+{
+  "source": "llm-assessment",      // or "ast-<tool>" for future extractors
+  "language": "python",             // language analyzed
+  "components": [
+    {
+      "symbol": "PipelineRunner",
+      "file": "src/pipeline/runner.py",
+      "module": "pipeline",
+      "exported": true,             // exported/public
+      "confidence": "INFERRED"       // INFERRED from LLM reading, STRUCTURAL for AST
+    }
+  ],
+  "contracts": [
+    {
+      "symbol": "StorageBackend",
+      "file": "src/storage/base.py",
+      "kind": "protocol",            // protocol, interface, abc, or type
+      "confidence": "PROVABLE",
+      "evidence": "src/storage/client.py:42 imports StorageBackend"  // quoted evidence for PROVABLE
+    }
+  ],
+  "edges": [
+    {
+      "from": "PipelineRunner",
+      "to": "StorageBackend",
+      "kind": "implements",          // implements, calls, instantiates, etc.
+      "confidence": "PROVABLE",
+      "evidence": "src/pipeline/runner.py:42 instantiates StorageBackend"
+    }
+  ]
+}
+```
+
+**Confidence rules:**
+- INFERRED: LLM-identified components and patterns (default for LLM reading). Requires developer confirmation.
+- PROVABLE: Direct code evidence (inheritance, type annotation, import + usage, instantiation). Requires quoted file:line in `evidence` field.
+- STRUCTURAL: Reserved for AST extractors; not used by LLM assessment.
+- All untagged entries must have an explicit confidence tier.
+
+**Pass 4 synthesis** reads this format, matches entries by `sourceLocation` (file + symbol), and generates `.c4` elements with `#inferred` or `#provable` tags.
+
+---
+
 ## Pass 1 — Discover
 
 **Goal:** Build the map before reading anything deeply. Establishes service boundaries, stack identity, and what later passes can find.
@@ -251,92 +301,177 @@ If module A imports module B, A is downstream of B. Derive a soft DAG from impor
 
 ### 3c — Component and Contract Discovery
 
-**Goal:** Within each service/module found in Pass 1, identify the primary classes (structural units) and the typed interfaces that cross module boundaries (contracts). These become `component` and `contract` elements in the proposed `.c4`.
+**Goal:** Within each service/module found in Pass 1, identify the primary classes (structural units) and the typed interfaces that cross module boundaries (contracts). Emit the code-level extraction format (JSON), defaulting LLM-derived entries to INFERRED and requiring quoted file:line evidence for PROVABLE.
 
-**Find components — exported classes by language:**
+**Language-specific extraction rules:**
+
+#### Python
+
+**Components** (exported classes):
+- Classes listed in `__all__` are exported.
+- Classes imported by other modules (detected via cross-module `from X import Y` patterns) are exported.
+- Model only classes with structural significance — primary controllers, providers, repositories. Skip helpers, utilities, and test doubles.
 
 ```bash
-# Python
 grep -rn "^class " TARGET_PATH --include="*.py" | grep -v "test_\|Test" | sort
-
-# TypeScript / JavaScript
-grep -rn "^export class " TARGET_PATH/src --include="*.ts" | sort
-
-# Go
-grep -rn "^type .* struct" TARGET_PATH --include="*.go" | sort
-
-# Rust
-grep -rn "^pub struct" TARGET_PATH/src --include="*.rs" | sort
 ```
 
-Model only classes with structural significance — primary controllers, providers, observers. Skip helpers, utilities, and test doubles.
+Read each class and check:
+1. Is it in `__all__`? → `exported: true`, confidence `INFERRED`.
+2. Is it imported by another module? → `exported: true`, confidence `PROVABLE` (quote the import line).
+3. Is it only used internally? → skip (internal detail).
 
-**Find contracts — typed interfaces that cross module boundaries:**
-
-Look for interface/type definition files. These are the contracts between modules — the types one module exports and another consumes.
+**Contracts** (typed interfaces crossing module boundaries):
+- `typing.Protocol`, `abc.ABC`, `dataclass` types used across modules.
+- Interface/type definition files: `protocols.py`, `types.py`, `interfaces.py`.
 
 ```bash
-# Python — protocols and type stubs
 find TARGET_PATH -name "protocols.py" -o -name "types.py" -o -name "interfaces.py" | sort
-
-# TypeScript — find types files and public interface files
-find TARGET_PATH/src -name "types.ts" -o -name "types.d.ts" -o -name "interfaces.ts" | sort
-
-# Go — interface types within packages
-grep -rn "^type .* interface" TARGET_PATH --include="*.go" | sort
-
-# Rust — traits
-grep -rn "^pub trait" TARGET_PATH/src --include="*.rs" | sort
+grep -rn "^class.*Protocol\|^class.*ABC\|^@dataclass" TARGET_PATH --include="*.py" | sort
 ```
 
-Read each types/interfaces file. For each interface or protocol:
-- Is it consumed by a different module than the one that defines it? → it's a **cross-module contract** (`contract` element, STRUCTURAL if the import is verifiable)
-- Is it only used internally? → skip (internal detail, not worth modeling)
+Read each definition. For each protocol, ABC, or dataclass:
+- If consumed by a different module than the one that defines it → it's a cross-module contract.
+  - Add to `contracts[]` with `kind: "protocol"`, `"abc"`, or `"dataclass"`.
+  - If you can quote an import or type-hint usage in another module → confidence `PROVABLE`, include `evidence`.
+  - Otherwise → confidence `INFERRED`.
+- If only used internally → skip.
 
-**Find specification contracts — design-time interface layers:**
+**Spec contracts** (design-time interface layers):
 
-If the target contains `specs/*/contracts/` directories (e.g. `specs/001-mapper/contracts/`, `specs/002-telemetry/contracts/`), detect them:
+If `specs/*/contracts/` directories exist (e.g. `specs/001-mapper/contracts/`), treat them as specification-layer contracts. This is conditional emission: detect the directories but do not require them. Include in the extraction format only if found.
 
 ```bash
-find TARGET_PATH/specs -type d -name contracts | while read dir; do
-  module_num=$(echo "$dir" | sed -E 's|.*/specs/([0-9]+)-.*|\1|')
-  module_name=$(echo "$dir" | sed -E 's|.*/specs/[0-9]+-([^/]+)/.*|\1|')
-  echo "$module_num:$module_name"
-done | sort
+find TARGET_PATH/specs -type d -name contracts | sort
 ```
 
 For each spec directory found:
 - Spec is a design-time constraint layer distinct from runtime `component` and `contract` elements.
-- If the target is a TypeScript project with module-based structure, these indicate formal interface specifications.
-- Propose `spec` element kind and `defines` relationship kind in the specification block.
-- Propose one `spec` element per module (e.g., `contractSpecs.mapperSpec`, `contractSpecs.telemetrySpec`).
-- Link specs to their governed services with `defines` relationships.
+- Confidence: directory existence = STRUCTURAL.
+- Do not fail Pass 3c if no specs are found; defer spec emission to Pass 4 conditional logic.
 
-Confidence: spec directory exists = STRUCTURAL. Mapping to module = PROVABLE if the spec path pattern matches module numbering.
+**Orchestration wiring** (component-level relationships):
 
-**Find the runtime wiring — the orchestration class:**
-
-Look for a class that holds references to all other modules and drives the lifecycle. Names like `Pipeline`, `Coordinator`, `Runner`, `Orchestrator`, `App`, `Integration`. Read it fully — this reveals the actual component-level relationships (which class calls which method on which other class).
+Look for the runtime wiring class: `Pipeline`, `Coordinator`, `Runner`, `Orchestrator`, `App`, `Integration`.
 
 ```bash
-# Python
 grep -rln "class.*Pipeline\|class.*Coordinator\|class.*Runner\|class.*Orchestrator" TARGET_PATH --include="*.py"
-
-# TypeScript
-grep -rln "class.*Pipeline\|class.*Coordinator\|class.*Runner\|class.*Orchestrator" TARGET_PATH/src --include="*.ts"
 ```
 
-Read the found file. Map which components call which methods on which other components — these become the component-level relationships in Pass 4.
+Read the found file. Map which components call which methods on which other components:
+- Extract edges from instantiation calls, method calls, and attribute assignments.
+- For each edge, determine the kind: `implements`, `calls`, `instantiates`, etc.
+- Quote the file:line of the relationship (e.g., `src/pipeline/runner.py:42`).
+- Confidence: `PROVABLE` if the call is explicit in the code, `INFERRED` if inferred from naming patterns.
 
-**Output of Pass 3:** `{ module_edges, table_reads, table_writes, pipeline_dag, pipeline_confidence, components, contracts, component_relationships }`.
+#### TypeScript / JavaScript
+
+**Components** (exported classes):
+- Classes with `export` keyword are exported.
+- Model only classes with structural significance — primary controllers, providers, repositories.
+
+```bash
+grep -rn "^export class " TARGET_PATH/src --include="*.ts" | sort
+```
+
+Read each class. Confidence:
+- If explicitly exported → `INFERRED` (LLM identified it).
+- If imported and used by another module → `PROVABLE` (quote the import line).
+
+**Contracts** (exported interfaces/types crossing module boundaries):
+- `export interface` and `export type` declarations.
+- Types/interfaces referenced in imports across modules.
+
+```bash
+grep -rn "^export interface\|^export type" TARGET_PATH/src --include="*.ts" | sort
+grep -rn "import.*{ [A-Z]" TARGET_PATH/src --include="*.ts" | sort
+```
+
+Read each interface/type:
+- If consumed by a different module → it's a cross-module contract.
+  - Add to `contracts[]` with `kind: "interface"` or `"type"`.
+  - If you can quote an import in another module → confidence `PROVABLE`, include `evidence`.
+  - Otherwise → confidence `INFERRED`.
+- If only used internally → skip.
+
+**Orchestration wiring** (same as Python):
+Look for the runtime wiring class by name and read its full method bodies to extract edges.
+
+#### Output of Pass 3c
+
+Emit a single JSON file containing the extracted format:
+
+```json
+{
+  "source": "llm-assessment",
+  "language": "python",
+  "components": [ ... ],
+  "contracts": [ ... ],
+  "edges": [ ... ]
+}
+```
+
+Save this as `_codeLevelExtraction.json` in the project root or as an intermediate artifact. **Pass 4 consumes only this format.**
+
+**Specification-layer contracts** (conditional):
+
+If `specs/*/contracts/` directories are detected, extract them as a separate part of the code-level extraction (or as a parallel output). Do not fail if not found.
+
+```bash
+find TARGET_PATH/specs -type d -name contracts | sort
+```
+
+For each spec directory found:
+- Extract the module name from the path pattern (e.g., `specs/001-mapper/contracts/` → module `mapper`).
+- Spec is a design-time constraint layer distinct from runtime `component` and `contract` elements.
+- Add to the extraction format (or note separately) for Pass 4 conditional emission.
+
+**Output of Pass 3:** `{ module_edges, table_reads, table_writes, pipeline_dag, pipeline_confidence, codeLevelExtraction, specLayerExtraction? }`.
 
 ---
 
 ## Pass 4 — Synthesize
 
-**Goal:** Merge all pass outputs into a proposed `.c4` diff, grouped by confidence tier. Cross-validate: an INFERRED edge promoted to PROVABLE if it appears in both the module graph (Pass 3) and the compose topology (Pass 2).
+**Goal:** Merge all pass outputs into a proposed `.c4` diff, grouped by confidence tier. For code-level elements, consume the extraction format from Pass 3c, match on `sourceLocation`, and emit with metadata and tags.
 
-### Cross-validation rules
+### Code-level element synthesis (from extraction format)
+
+**Input:** `_codeLevelExtraction.json` from Pass 3c (or an empty extraction if no components/contracts found).
+
+**Processing:**
+
+1. **Match on sourceLocation**: For each component/contract in the extraction, check if an element with matching `sourceLocation` metadata already exists in the model. If it does, update it (re-assessment scenario, no duplication). If it doesn't, add it.
+
+2. **Nesting**: Nest all `component` and `contract` elements under their parent `service` (inferred from Pass 1's service mapping).
+
+3. **Confidence → tags**: For each element:
+   - If confidence is `INFERRED` → add `#inferred` tag.
+   - If confidence is `PROVABLE` → add `#provable` tag.
+   - Do not tag unconfirmed items; those stay for developer review.
+
+4. **Metadata**: Add `sourceLocation` metadata: `metadata { sourceLocation '<repo-relative-path>#<SymbolName>' }`.
+
+5. **Cross-module evidence filter**: Drop any component or contract entry from the extraction if it has no cross-module evidence (e.g., a component that is never imported outside its module, a protocol only used internally). These are implementation details, not structural elements.
+
+**Example output (from extraction):**
+
+```
+// ── From Pass 3c extraction (codeLevelExtraction.json) ───
+component pipeline "Pipeline" #provable {
+  description "Orchestrates the ingest cycle."
+  metadata { sourceLocation "src/pipeline/runner.py#Pipeline" }
+}
+
+contract storageBackend "StorageBackend" #inferred {
+  description "Storage abstraction protocol."
+  metadata { sourceLocation "src/storage/base.py#StorageBackend" }
+}
+
+// Edges from extraction:
+pipeline -> storageBackend "implements"
+```
+
+### Architecture-level cross-validation rules
 
 | Finding | If also supported by | Promote to |
 |---------|---------------------|------------|
@@ -346,29 +481,7 @@ Read the found file. Map which components call which methods on which other comp
 
 ### Proposed `.c4` Output
 
-The specification block must declare the element kinds used. Always include `component` and `contract` when Pass 3c found them. Include `spec` and `defines` if `specs/*/contracts/` directories were detected.
-
-```
-specification {
-  element actor
-  element system
-  element service
-  element component   // a primary class within a service
-  element contract    // a typed interface that crosses a module boundary
-  element spec        // design-time constraint layer (optional, if specs/*/contracts/ found)
-  element datastore
-
-  relationship reads
-  relationship writes
-  relationship instantiates
-  relationship emits
-  relationship provides
-  relationship subscribes
-  relationship implements
-  relationship uses
-  relationship defines // links spec to governed service or contract (optional, if specs/*/contracts/ found)
-}
-```
+The specification block must declare all element kinds used. The base specification (from `blueprint/model/system.c4`) now includes `component`, `contract`, and `spec` unconditionally. Re-run `install.sh` or manually update existing projects.
 
 Group proposed elements by tier. AMBIGUOUS items are commented stubs with explicit questions.
 
@@ -378,12 +491,14 @@ system acme "Acme" {
   service ingestor "Ingestor" {
     technology "Python"
 
-    component pipeline "Pipeline" {         // export class Pipeline in pipeline.py
+    component pipeline "Pipeline" #provable {
       description "Orchestrates the ingest cycle."
+      metadata { sourceLocation "src/pipeline/runner.py#Pipeline" }
     }
 
-    contract recordPacket "RecordPacket" {  // defined in types.py, consumed by Transformer
+    contract recordPacket "RecordPacket" #provable {
       description "Typed payload emitted after each ingest step."
+      metadata { sourceLocation "src/types.py#RecordPacket" }
     }
   }
 
@@ -393,9 +508,7 @@ system acme "Acme" {
 }
 
 // ── PROVABLE (auto-stageable) ─────────────────────────────────────
-// pipeline.py imports boto3 and references 'raw-manifests' bucket by name
-ingestor.pipeline -> ingest_bucket "reads raw manifests"
-// transformer/types.py imports RecordPacket from ingestor/types.py
+// RecordPacket is imported by transformer.py line 8
 ingestor.recordPacket -> transformer "consumed by"
 
 // ── INFERRED (confirm before staging) ────────────────────────────
@@ -406,6 +519,32 @@ service transformer "Transform Service" { ... }
 // ── AMBIGUOUS (needs your input) ─────────────────────────────────
 // Q: What is the data classification for the records table?
 // Q: Who owns the ingestor service?
+```
+
+### Specification-layer element emission (conditional)
+
+**Conditional on Pass 3's detection of `specs/*/contracts/` directories:**
+
+If `specs/*/contracts/` directories were found during Pass 3c:
+- Add `spec` and `defines` element/relationship kinds to the specification block (already unconditional in `blueprint/model/system.c4`, so no change needed).
+- Emit one `spec` element per detected module (e.g., `spec mapperSpec "Mapper Specification"`).
+- Nest each spec under a `contractSpecs` container: `contractSpecs.mapperSpec`.
+- Link each spec to its governed service with `defines` relationship (e.g., `contractSpecs.mapperSpec -> mapper "defines"`).
+
+If no `specs/*/contracts/` directories were found:
+- Do not emit `spec` elements; the kinds remain in the specification but unused.
+- This is harmless and forward-compatible: a project can add spec contracts later without modifying the specification.
+
+### Code-level views
+
+For each service with components, generate a `codeStructure` view:
+
+```
+view codeStructure_ingestor {
+  title "Ingestor — Code Structure"
+  include ingestor.**  // all nested components and contracts
+  autoLayout LeftRight
+}
 ```
 
 ### Views to Propose

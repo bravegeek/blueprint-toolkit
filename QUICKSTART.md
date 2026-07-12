@@ -66,9 +66,30 @@ The skill reads your system in four passes (file layout → schema/storage → m
 |-------|-----------------|----------------|
 | **Interface** | How the outside talks to the system | CLI entry points, web server routes, scrape targets |
 | **Application** | Business logic that runs | Services, scripts, pipelines, workers |
+| **Code-Level** | Exported classes and cross-module contracts (NEW) | Components, Protocols/Interfaces, type hints |
 | **Data** | What the system persists | DB tables, object storage buckets, queues, migrations |
 | **Integration** | External systems depended on | HTTP clients, API keys, import analysis |
 | **Infrastructure** | How everything runs | Docker Compose services, env config, Makefile |
+
+## Code-Level Modeling Scope
+
+The `/assessment` skill extracts code-level structure (components and contracts) within each service. **Only exported/public classes and cross-module interfaces are modeled.**
+
+**What is modeled:**
+- Classes listed in `__all__` (Python) or marked `export` (TypeScript/JavaScript).
+- Typed interfaces that cross module boundaries: `Protocol`, `ABC`, `dataclass` (Python); `interface`, `type` (TypeScript/JavaScript).
+
+**What is NOT modeled (hard rules):**
+- Private/internal helper classes, utilities, or implementations.
+- Single-file services with no module structure.
+- Anything only used within its own module.
+
+**Why:** The exported-surface-only cap controls model size (class-level structure multiplies quickly) and focuses the model on structural integrity, not implementation detail. The `/blueprint-change` skill includes a code-level diff only when a proposed change adds, removes, or significantly rewires components or contracts.
+
+**Confidence tiers for code-level elements:**
+- `#provable` — LLM identified direct evidence (import statements, type hints, instantiation).
+- `#inferred` — LLM pattern-matched from naming and module structure (no direct evidence).
+- No tag → confirmed by developer (commit the `.c4` diff to stage it).
 
 ## The Loop
 
@@ -93,6 +114,50 @@ Once you have a model, every change follows this loop:
 ## Greenfield (no running system yet)
 
 Skip `/assessment`. Run `/blueprint-change` with a description of the system. The skill authors model elements from the description and marks anything unverified. Once you build the system, run `/assessment` to ground-truth the model.
+
+## Verifying Code-Level Extraction (Optional)
+
+To verify that code-level component and contract extraction works end-to-end:
+
+**1. Run assessment on a sample service:**
+
+```
+/assessment . path/to/service
+```
+
+This should produce:
+- A `.c4` model with `component` and `contract` elements nested under their service.
+- Each element tagged with `#provable` or `#inferred` based on evidence strength.
+- `sourceLocation` metadata on code-level elements (e.g., `src/pipeline/runner.py#Pipeline`).
+
+**2. Check for extraction artifacts:**
+
+The assessment skill may cache the intermediate extraction JSON (`_codeLevelExtraction.json`). Inspect it to verify:
+- `source: "llm-assessment"`
+- `language: "python"` or `"typescript"`
+- `components[]`, `contracts[]`, `edges[]` with the format defined in `skills/assessment/SKILL.md`
+
+**3. Generate code-structure views:**
+
+If components were found, the proposal should include per-service `codeStructure` views:
+
+```
+view codeStructure_myService {
+  title 'My Service — Code Structure'
+  include myService.**
+}
+```
+
+Open `blueprint/bin/likec4 serve` and verify the view renders components and contracts within the service.
+
+**4. Re-run assessment to verify update-in-place:**
+
+Run `/assessment` on the same service again. The proposal should:
+- Match existing code-level elements by `sourceLocation`.
+- Update their confidence tags if evidence changes (e.g., `#inferred` → `#provable`).
+- Not create duplicates.
+
+If duplicates appear, the `sourceLocation` matching is not working correctly.
 
 ## Tips
 
