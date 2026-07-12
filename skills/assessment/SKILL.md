@@ -10,15 +10,7 @@ Read the actual system state in four passes, propose a LikeC4 model with confide
 
 `path` defaults to `.` (project root). Pass any local path to assess a different target.
 
-### Fresh Assessment Default
-
-**Every run starts fresh from the codebase.** If prior assessment artifacts exist (old extraction JSONs, previous model outputs, backups), the skill will:
-
-1. **Detect** if old assessments exist in `blueprint/.backup/`, `.assessmentCache/`, or related locations
-2. **Ask** the developer: "Prior assessment artifacts found. Start fresh or reuse?"
-3. **Default to fresh**: If the developer does not explicitly choose to reuse, a new assessment runs from scratch
-
-This ensures every assessment reflects the *current* codebase state, not stale inferences from prior runs. Reuse is always opt-in, never automatic.
+**Every run is fresh from the codebase.** No reuse of prior assessments, backups, or extraction caches. If you want to restore an old model, use `blueprint/.backup/` manually.
 
 ---
 
