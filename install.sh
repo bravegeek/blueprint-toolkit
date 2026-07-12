@@ -2,21 +2,27 @@
 # Install the blueprint toolkit into a target project.
 #
 # Usage:
-#   ./install.sh [target-dir] [project-name]
+#   ./install.sh [--force] [target-dir] [project-name]
 #
+#   --force       Overwrite existing toolkit files (skills, AGENTS.md,
+#                 .mcp.json, blueprint/bin/likec4) with the versions from
+#                 this checkout. Model files (system.c4, views.c4,
+#                 .likec4rc) are never overwritten, even with --force,
+#                 since they hold your project's own content.
 #   target-dir    Project to install into (default: current directory)
 #   project-name  LikeC4 project name written to .likec4rc
 #                 (prompted for if omitted and running interactively)
 #
 # Portable across bash and zsh (`bash install.sh` / `zsh install.sh` both work).
-# Existing files in the target are never overwritten — they are skipped
-# with a warning so re-running is safe.
+# Existing files in the target are never overwritten by default — they are
+# skipped with a warning so re-running is safe. Pass --force to pull in
+# updated toolkit files (see above for what's exempt).
 #
 # Upgrading an existing project:
-# Re-run this script to install new or updated skills. If your project already
-# has `system.c4` and `views.c4`, they are skipped — you must manually merge
-# new specification blocks (new element/relationship kinds, tags, views) or
-# accept the current file and re-run only the skills.
+# Re-run this script (optionally with --force) to install new or updated
+# skills. `system.c4` and `views.c4` are always skipped if present — you must
+# manually merge new specification blocks (new element/relationship kinds,
+# tags, views) or accept the current file and re-run only the skills.
 #
 # For additive upgrades (e.g., adding code-level element kinds), the specification
 # changes are backward-compatible: existing elements and views remain valid, and
@@ -25,6 +31,13 @@
 set -eu
 
 SRC_DIR=$(cd "$(dirname "$0")" && pwd)
+
+FORCE=0
+if [ "${1:-}" = "--force" ]; then
+  FORCE=1
+  shift
+fi
+
 TARGET_DIR=${1:-$PWD}
 PROJECT_NAME=${2:-}
 
@@ -53,12 +66,26 @@ PROJECT_NAME=$(printf '%s' "$PROJECT_NAME" | tr '[:upper:] ' '[:lower:]-' | tr -
 copied=0
 skipped=0
 
+is_protected() {
+  case "$1" in
+    blueprint/model/system.c4 | blueprint/model/views.c4 | blueprint/model/.likec4rc) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 install_file() {
   src="$SRC_DIR/$1"
   dst="$TARGET_DIR/$1"
   if [ -e "$dst" ]; then
-    printf 'skip  %s (already exists)\n' "$1"
-    skipped=$((skipped + 1))
+    if [ "$FORCE" -eq 1 ] && ! is_protected "$1"; then
+      mkdir -p "$(dirname "$dst")"
+      cp "$src" "$dst"
+      printf 'force %s (overwritten)\n' "$1"
+      copied=$((copied + 1))
+    else
+      printf 'skip  %s (already exists)\n' "$1"
+      skipped=$((skipped + 1))
+    fi
   else
     mkdir -p "$(dirname "$dst")"
     cp "$src" "$dst"
