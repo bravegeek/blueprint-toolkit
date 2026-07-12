@@ -107,18 +107,21 @@ Pass 3c produces a language-neutral intermediate extraction document (JSON) that
 
 **Steps:**
 
+**If `TARGET_PATH` is inside a git repo, prefer this form** — it avoids escaped-paren shell grouping (`\( \)`) entirely, which some tool-call/permission parsers choke on when the command is long or multi-line:
+
 ```bash
-# File layout — entry points, config files, known pipeline indicators
-find TARGET_PATH -maxdepth 4 \
-  \( -name "*.py" -o -name "docker-compose*.yml" -o -name "Makefile" \
-     -o -name "*.toml" -o -name "pyproject.toml" -o -name "*.cfg" \
-     -o -name "requirements*.txt" -o -name "Procfile" \
-     -o -name "*.env" -o -name ".env*" \) \
-  -not -path "*/.*" -not -path "*/__pycache__/*" -not -path "*/node_modules/*" \
-  | sort
+git -C TARGET_PATH ls-files | grep -E '\.(py|ts|tsx|toml|cfg)$|(^|/)(docker-compose.*\.yml|Makefile|pyproject\.toml|requirements.*\.txt|Procfile|package\.json|go\.mod|Cargo\.toml|\.env.*)$' | sort
+```
+
+**Otherwise (no git repo), fall back to `find`:**
+
+```bash
+find TARGET_PATH -maxdepth 4 \( -name "*.py" -o -name "docker-compose*.yml" -o -name "Makefile" -o -name "*.toml" -o -name "pyproject.toml" -o -name "*.cfg" -o -name "requirements*.txt" -o -name "Procfile" -o -name "*.env" -o -name ".env*" \) -not -path "*/.*" -not -path "*/__pycache__/*" -not -path "*/node_modules/*" | sort
 ```
 
 Adapt the file extensions and config filenames to your stack (e.g. add `*.ts`, `go.mod`, `Cargo.toml`, `package.json` as appropriate).
+
+**Always keep the actual tool-call command on a single line, whichever form you use.** Backslash line-continuations are for human readability in this doc only — carrying them verbatim into a tool-call argument, especially combined with escaped parens, can trip a permission/safety parser into an unclassifiable "parse error" prompt even though the shell syntax is valid. Expand any pattern list inline on one line instead.
 
 From the layout, determine:
 - **Service count** — multiple `main.py` / `app.py` / `index.ts` / `main.go` at different directory levels = multiple services (STRUCTURAL)

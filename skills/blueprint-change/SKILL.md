@@ -96,7 +96,21 @@ view export_flow {
 
 Leave `owner`, `dataClassification`, and `auth` as comments with `?` if they cannot be determined. These are always AMBIGUOUS.
 
-### 4.5 — Code-structure-impact check (new step)
+### 4a — Resolve ambiguities against code before asking
+
+**Goal:** Never hand the developer a diagram full of bare `?` marks or open questions when the answer is sitting in the codebase. "AMBIGUOUS" means *investigate first*, not *skip straight to asking*.
+
+**Process, for every `?`, `[unverified]`, or open question carried over from a ticket/artifact:**
+
+1. Search the actual codebase (grep/read — comments, type definitions, function bodies, tests) for direct evidence before treating it as unresolved.
+2. **If the code gives a citable, unambiguous answer** (PROVABLE — same bar as the assessment skill's confidence scale): resolve it directly in the diff and cite the evidence as a comment (`file:line` or a quoted comment). Do not ask the developer to confirm something the code already settles.
+   > Example: "dice roll validity" resolved by quoting `lib/vtt/dice.ts:47` — a comment stating `rollDie` is the only source of randomness and is never called by a reducer. Model it as-is with no server-side validation edge; don't ask.
+3. **If the code is genuinely silent, or the question is a business/organizational judgment call** (ownership, compliance classification, whether a feature should exist) — do not guess, and do not leave a bare `?` either. Present 2–4 concrete, mutually exclusive modeling options, each phrased as what would literally go in the diff, with a one-line rationale. Recommend the option matching the existing model's conventions.
+4. Fold whichever option gets chosen into the diff before step 5. What the developer reviews should be a finished proposal — investigated where possible, a real decision where not — never a diagram scattered with unresolved question marks.
+
+**Still always AMBIGUOUS, skip straight to asking (step 3 above) with no investigation step:** legal/compliance classification, who owns a system in an organizational sense, and any judgment call with no codebase evidence that could plausibly exist.
+
+### 4.5 — Code-structure-impact check
 
 **Goal:** Determine whether the proposed change adds, removes, or rewires components or contracts within any touched services.
 
@@ -210,5 +224,5 @@ Does the diagram look right?
 - Never invent elements not in the current model or the ticket. If uncertain, mark as `[unverified]`.
 - Never write `blueprint/model/*.c4` files directly. The diff is a proposal only — the developer commits it.
 - Never generate `design.md`, `tasks.md`, or code before approval.
-- `dataClassification` and `auth` are always AMBIGUOUS — always leave as `?` for developer input.
+- `dataClassification` and `auth` are always AMBIGUOUS by default — but per step 4a, investigate the code first. Only fall back to asking (via options, not a bare `?`) when the code is silent or the call is organizational/legal.
 - If the MCP server is unavailable and `blueprint/model/system.c4` is empty, say so and suggest running `/assessment` first.
