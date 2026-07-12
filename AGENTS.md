@@ -95,11 +95,13 @@ Pass 4 synthesis reads this format and generates `.c4` elements with `sourceLoca
 Every code-level element carries a `sourceLocation` metadata field in the format `<repo-relative-path>#<SymbolName>`:
 
 ```
-component pipeline "Pipeline" #provable {
+component pipeline "Pipeline" {
+  #provable
   metadata { sourceLocation "src/pipeline/runner.py#Pipeline" }
 }
 
-contract storageBackend "StorageBackend" #inferred {
+contract storageBackend "StorageBackend" {
+  #inferred
   metadata { sourceLocation "src/storage/base.py#StorageBackend" }
 }
 ```
@@ -117,6 +119,22 @@ This is the join key for deterministic extraction: when a future AST extractor o
 | `.mcp.json` | LikeC4 MCP server — read-only model query |
 | `skills/assessment/SKILL.md` | Four-pass system analysis with code-level extraction |
 | `skills/blueprint-change/SKILL.md` | Ticket → EARS → .c4 diff (includes code-level impact check) |
+
+## LikeC4 Syntax Quick Reference
+
+Confidence and other cross-cutting tags are applied with `#tagName` as the *first* statement(s) inside the element's body — there is no `tags` keyword, no comma-separated inline form after the title, and tags cannot come after other properties like `description`:
+
+```
+component pipeline "Pipeline" {
+  #provable
+  description "Orchestrates the ingest cycle."
+  metadata { sourceLocation "src/pipeline/runner.py#Pipeline" }
+}
+```
+
+Tags are declared once in the `specification` block (`tag provable { color #90EE90 }` in `blueprint/model/system.c4`) and referenced by name with `#` at the point of use, never redeclared per-element.
+
+Do not empirically test LikeC4 syntax by writing throwaway files and running the CLI against them. The existing `.c4` files (`blueprint/model/system.c4`, `blueprint/model/views.c4`) and the examples throughout `skills/*/SKILL.md` are the first reference — check those before anything else. If a construct genuinely isn't demonstrated anywhere in this repo, the language grammar is documented at https://likec4.dev/dsl/ (fetch it if you have web access); there is no full syntax reference bundled locally, only a short install-focused `README.md` in the npm package.
 
 ## Running LikeC4
 

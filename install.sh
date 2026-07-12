@@ -3,12 +3,19 @@
 #
 # Usage:
 #   ./install.sh [--force] [target-dir] [project-name]
+#   ./install.sh --clean [--yes] [target-dir]
 #
 #   --force       Overwrite existing toolkit files (skills, AGENTS.md,
 #                 .mcp.json, blueprint/bin/likec4) with the versions from
 #                 this checkout. Model files (system.c4, views.c4,
 #                 .likec4rc) are never overwritten, even with --force,
 #                 since they hold your project's own content.
+#   --clean       Reset system.c4 and views.c4 to the blank toolkit templates,
+#                 so you can re-run /assessment from scratch. The existing
+#                 files are backed up first (see below), never just deleted.
+#                 Prompts for confirmation unless --yes is also passed.
+#                 .likec4rc (project name) is left untouched.
+#   --yes         Skip the confirmation prompt for --clean.
 #   target-dir    Project to install into (default: current directory)
 #   project-name  LikeC4 project name written to .likec4rc
 #                 (prompted for if omitted and running interactively)
@@ -32,24 +39,64 @@ set -eu
 
 SRC_DIR=$(cd "$(dirname "$0")" && pwd)
 
-FORCE=0
-if [ "${1:-}" = "--force" ]; then
-  FORCE=1
-  shift
-fi
-
-TARGET_DIR=${1:-$PWD}
-PROJECT_NAME=${2:-}
-
 fail() {
   printf 'error: %s\n' "$1" >&2
   exit 1
 }
 
+FORCE=0
+CLEAN=0
+YES=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --force) FORCE=1; shift ;;
+    --clean) CLEAN=1; shift ;;
+    --yes) YES=1; shift ;;
+    *) break ;;
+  esac
+done
+[ "$CLEAN" -eq 0 ] || [ "$FORCE" -eq 0 ] || fail "--force and --clean cannot be combined"
+
+TARGET_DIR=${1:-$PWD}
+PROJECT_NAME=${2:-}
+
 [ -d "$TARGET_DIR" ] || fail "target directory does not exist: $TARGET_DIR"
 TARGET_DIR=$(cd "$TARGET_DIR" && pwd)
 [ "$TARGET_DIR" != "$SRC_DIR" ] || fail "target is the toolkit repo itself; run this from your project or pass its path"
 [ -f "$SRC_DIR/AGENTS.md" ] && [ -d "$SRC_DIR/blueprint/model" ] || fail "toolkit files not found next to install.sh (incomplete checkout?)"
+
+if [ "$CLEAN" -eq 1 ]; then
+  SYS_C4="$TARGET_DIR/blueprint/model/system.c4"
+  VIEWS_C4="$TARGET_DIR/blueprint/model/views.c4"
+  [ -f "$SYS_C4" ] || fail "no blueprint/model/system.c4 found in $TARGET_DIR — nothing to clean"
+
+  if [ "$YES" -ne 1 ]; then
+    printf 'This will reset system.c4 and views.c4 in %s to blank templates.\n' "$TARGET_DIR"
+    printf 'Current files will be backed up first, then overwritten.\n'
+    if [ -t 0 ]; then
+      printf 'Continue? [y/N] '
+      read -r REPLY || true
+      case "$REPLY" in
+        y | Y | yes | YES) ;;
+        *) fail "aborted" ;;
+      esac
+    else
+      fail "refusing to clean without confirmation in a non-interactive shell; pass --yes"
+    fi
+  fi
+
+  BACKUP_DIR="$TARGET_DIR/blueprint/model/.backup/$(date +%Y%m%d-%H%M%S)"
+  mkdir -p "$BACKUP_DIR"
+  cp "$SYS_C4" "$BACKUP_DIR/system.c4"
+  [ -f "$VIEWS_C4" ] && cp "$VIEWS_C4" "$BACKUP_DIR/views.c4"
+  printf 'Backed up current model files to %s\n' "$BACKUP_DIR"
+
+  cp "$SRC_DIR/blueprint/model/system.c4" "$SYS_C4"
+  cp "$SRC_DIR/blueprint/model/views.c4" "$VIEWS_C4"
+  printf 'Reset system.c4 and views.c4 to blank templates.\n\n'
+  printf 'Next step: run /assessment . to model the existing system from scratch.\n'
+  exit 0
+fi
 
 # Ask for the project name if not given and we have a terminal.
 if [ -z "$PROJECT_NAME" ]; then

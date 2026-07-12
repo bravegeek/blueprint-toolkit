@@ -12,6 +12,28 @@ Read the actual system state in four passes, propose a LikeC4 model with confide
 
 ---
 
+## Tooling Conventions
+
+Create or edit `.c4` file content directly (whatever your file-write capability is), never by piping a shell heredoc into `cat`/`tee`. LikeC4 syntax is full of `{ }` blocks and quoted strings, and shell heredocs of that shape routinely (and falsely) get flagged as command obfuscation, forcing a manual approval per file. A shell command should only ever be `likec4 validate <path>` or similar — never the thing creating the `.c4` content.
+
+**Wrong:**
+```
+cat > /tmp/test.c4 <<'EOF'
+specification { element system }
+model { system sys { title 'Sys' } }
+EOF
+likec4 validate /tmp/test.c4
+```
+
+**Right:** write the file directly through your editing capability, then shell out only to validate:
+```
+likec4 validate /tmp/test.c4
+```
+
+**Don't empirically test syntax at all if you can avoid it.** Before writing any throwaway file to "check" how a construct works, look at `blueprint/model/system.c4`, `blueprint/model/views.c4`, and the worked examples already in `skills/*/SKILL.md` — they cover element declarations, nesting, relationships, and tag usage (`#tagName` as the first statement inside an element's body, declared once in `specification`, never inline after the title and never a `tags` keyword). If the answer isn't there, check `AGENTS.md`'s LikeC4 Syntax Quick Reference. Only fall back to a scratch-file experiment if none of the above answers it, and even then write the file directly rather than through a heredoc.
+
+---
+
 ## Confidence Tiers
 
 Every proposed element and relationship carries a confidence tier.
@@ -451,6 +473,7 @@ For each spec directory found:
    - If confidence is `INFERRED` → add `#inferred` tag.
    - If confidence is `PROVABLE` → add `#provable` tag.
    - Do not tag unconfirmed items; those stay for developer review.
+   - Tag syntax: `#tagName` must be the *first* statement(s) inside the element's brace body, one per line (or comma-separated) — never inline after the title, and never after `description`/`metadata`. There is no `tags` keyword. E.g. `component pipeline "Pipeline" { #provable ... }`, not `component pipeline "Pipeline" #provable { ... }`.
 
 4. **Metadata**: Add `sourceLocation` metadata: `metadata { sourceLocation '<repo-relative-path>#<SymbolName>' }`.
 
@@ -460,12 +483,14 @@ For each spec directory found:
 
 ```
 // ── From Pass 3c extraction (codeLevelExtraction.json) ───
-component pipeline "Pipeline" #provable {
+component pipeline "Pipeline" {
+  #provable
   description "Orchestrates the ingest cycle."
   metadata { sourceLocation "src/pipeline/runner.py#Pipeline" }
 }
 
-contract storageBackend "StorageBackend" #inferred {
+contract storageBackend "StorageBackend" {
+  #inferred
   description "Storage abstraction protocol."
   metadata { sourceLocation "src/storage/base.py#StorageBackend" }
 }
@@ -494,12 +519,14 @@ system acme "Acme" {
   service ingestor "Ingestor" {
     technology "Python"
 
-    component pipeline "Pipeline" #provable {
+    component pipeline "Pipeline" {
+      #provable
       description "Orchestrates the ingest cycle."
       metadata { sourceLocation "src/pipeline/runner.py#Pipeline" }
     }
 
-    contract recordPacket "RecordPacket" #provable {
+    contract recordPacket "RecordPacket" {
+      #provable
       description "Typed payload emitted after each ingest step."
       metadata { sourceLocation "src/types.py#RecordPacket" }
     }
@@ -557,7 +584,10 @@ Always propose these four views. Add extras for any focused concern worth isolat
 ```
 view index {
   title "[system] — System Overview"
-  include *                          // all elements, components nested inside services
+  include *                          // top-level only: actors, external systems, the system boundary
+  include system.*                   // one level of children inside the system (services, datastores, etc.)
+                                      // NOTE: unscoped `include *` does NOT descend into nested elements —
+                                      // it must be paired with an explicit `<system>.*` (or `.**`) to show internals.
 }
 
 view context {

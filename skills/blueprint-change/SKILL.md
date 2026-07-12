@@ -172,7 +172,8 @@ Leave `owner`, `dataClassification`, and `auth` as comments with `?` if they can
 
 // Example:
 // In service transformer:
-//   + new component enricher "Data Enricher" #planned {
+//   + new component enricher "Data Enricher" {
+//       #planned
 //       description "Adds contextual metadata to records."
 //       metadata { sourceLocation "src/transformer/enricher.py#Enricher" }
 //     }

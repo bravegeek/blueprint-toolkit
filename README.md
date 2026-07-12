@@ -38,6 +38,8 @@ blueprint-toolkit/
 
 Then point it at your code. See `QUICKSTART.md`.
 
+To reset `system.c4`/`views.c4` back to blank templates and re-run `/assessment` from scratch (backing up the current model first), use `./install.sh --clean /path/to/your-project`.
+
 ## The One Rule
 
 Never write `.c4` files directly. All model changes go through `/blueprint-change` so the human sees the diagram before anything is implemented.

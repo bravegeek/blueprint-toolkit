@@ -60,6 +60,16 @@ The skill reads your system in four passes (file layout → schema/storage → m
 
 > **Stack-specific probes:** the assessment skill ships with Python/Postgres/S3 probe examples. The `## Pass 2` and `## Pass 3` sections in `skills/assessment/SKILL.md` are annotated — adapt the probe code to your stack before running.
 
+### Re-running assessment from scratch
+
+If a prior assessment came out wrong or incomplete and you want a clean re-run rather than patching the existing model:
+
+```bash
+./install.sh --clean /path/to/your-project
+```
+
+This resets `system.c4` and `views.c4` to the blank templates. It backs up the current files first (to `blueprint/model/.backup/<timestamp>/`, never just deletes them), then prompts for confirmation — pass `--yes` to skip the prompt in a non-interactive shell. Then run `/assessment .` again.
+
 ## Standard Assessment Layers
 
 | Layer | What it captures | Probe patterns |
