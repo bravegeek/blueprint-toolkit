@@ -7,9 +7,10 @@
 #
 #   --force       Overwrite existing toolkit files (skills, AGENTS.md,
 #                 .mcp.json, blueprint/bin/likec4) with the versions from
-#                 this checkout. Model files (system.c4, views.c4,
-#                 .likec4rc) are never overwritten, even with --force,
-#                 since they hold your project's own content.
+#                 this checkout, and replace any stale real skill dir sitting
+#                 in an agent's discovery path with the wrapper symlink. Model
+#                 files (system.c4, views.c4, .likec4rc) are never overwritten,
+#                 even with --force, since they hold your project's own content.
 #   --clean       Reset system.c4 and views.c4 to the blank toolkit templates,
 #                 so you can re-run /assessment from scratch. The existing
 #                 files are backed up first (see below), never just deleted.
@@ -34,6 +35,14 @@
 # For additive upgrades (e.g., adding code-level element kinds), the specification
 # changes are backward-compatible: existing elements and views remain valid, and
 # new kinds are immediately available to use.
+#
+# Agent-agnostic layout (see openspec/project.md):
+# The canonical skill is the vendor-neutral directory skills/<name>/ (SKILL.md
+# plus every supporting script). Each skill directory is copied WHOLE — never an
+# enumerated file list — so a new supporting file reaches the target without any
+# edit here. An agent's skill-discovery path (e.g. .claude/skills/<name>) is set
+# up as a THIN WRAPPER: a relative symlink to skills/<name>/, never a copy, so it
+# can neither drift nor lose files.
 
 set -eu
 
@@ -144,6 +153,49 @@ install_file() {
   fi
 }
 
+# Copy an entire canonical skill directory (SKILL.md + every supporting file)
+# into TARGET/skills/<name>/. Per-file, so --force and the existing-file skip
+# apply to each file — and, crucially, so no file (e.g. an extractor script) can
+# be left behind by an out-of-date list. Adding a file to a skill needs no edit
+# here; adding a whole skill only means naming it in SKILLS below.
+install_skill() {
+  name="$1"
+  for src in "$SRC_DIR/skills/$name"/*; do
+    [ -e "$src" ] || continue
+    install_file "skills/$name/${src##*/}"
+  done
+}
+
+# Point an agent's skill-discovery path at the canonical skills/<name>/ with a
+# relative symlink — the "thin wrapper" rule. vendor_dir is relative to TARGET
+# (e.g. .claude/skills). A real dir/file squatting there is stale drift: skipped
+# with a warning unless --force, which replaces it with the symlink.
+link_skill_wrapper() {
+  vendor_dir="$1"
+  name="$2"
+  link="$TARGET_DIR/$vendor_dir/$name"
+  target="../../skills/$name" # from $vendor_dir/$name back to TARGET/skills/$name
+  mkdir -p "$TARGET_DIR/$vendor_dir"
+  if [ -L "$link" ]; then
+    if [ "$(readlink "$link")" = "$target" ]; then
+      printf 'ok    %s/%s -> %s (wrapper)\n' "$vendor_dir" "$name" "$target"
+      return
+    fi
+    rm -f "$link"
+  elif [ -e "$link" ]; then
+    if [ "$FORCE" -eq 1 ]; then
+      rm -rf "$link"
+    else
+      printf 'skip  %s/%s (real dir/file, not a wrapper — pass --force to replace)\n' "$vendor_dir" "$name"
+      skipped=$((skipped + 1))
+      return
+    fi
+  fi
+  ln -s "$target" "$link"
+  printf 'link  %s/%s -> %s (wrapper)\n' "$vendor_dir" "$name" "$target"
+  copied=$((copied + 1))
+}
+
 printf 'Installing blueprint toolkit into %s\n\n' "$TARGET_DIR"
 
 for f in \
@@ -152,21 +204,18 @@ for f in \
   blueprint/model/system.c4 \
   blueprint/model/views.c4 \
   blueprint/model/.likec4rc \
-  blueprint/bin/likec4 \
-  skills/assessment/SKILL.md \
-  skills/blueprint-change/SKILL.md
+  blueprint/bin/likec4
 do
   install_file "$f"
 done
 chmod +x "$TARGET_DIR/blueprint/bin/likec4" 2>/dev/null || true
 
-# Also pick up any supporting files the skills ship beyond SKILL.md.
-for src in "$SRC_DIR"/skills/*/*; do
-  rel=${src#"$SRC_DIR"/}
-  case "$rel" in
-    */SKILL.md) ;; # handled above
-    *) [ -f "$src" ] && install_file "$rel" ;;
-  esac
+# Skills: copy each canonical directory whole, then point the agent's discovery
+# path at it via a thin wrapper symlink. To install a new skill, add its name.
+SKILLS="assessment blueprint-change"
+for name in $SKILLS; do
+  install_skill "$name"
+  link_skill_wrapper ".claude/skills" "$name"
 done
 
 # Set the project name in .likec4rc (only if we just created it).
