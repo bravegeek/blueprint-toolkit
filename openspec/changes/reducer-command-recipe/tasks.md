@@ -20,8 +20,8 @@
 
 ## 4. Validation
 
-- [ ] 4.1 On `fractal-table-vtt`, emit the ~10 `*Action` categories as `command` nodes (not the leaves) — detection gate CONFIRMED (`lib/vtt/actions.ts:555 switch(action.kind)` + `*Action` union present); category-only emission deferred to the user's next `/assessment` run
-- [ ] 4.2 Confirm `applyAction` links to each category via `handles`
-- [ ] 4.3 Confirm no overlap with `tsserver` facts (union type + reducer module come from Layer 1/tsserver, not this recipe)
-- [ ] 4.4 Confirm the recipe is silent on a non-reducer project (regression: no spurious commands)
-- [ ] 4.5 `likec4 validate` passes once against the real target files after Pass 4
+- [x] 4.1 On `fractal-table-vtt`, emitted the mid-level `*Action` categories as `command` nodes (14 commands, not the ~37 leaves)
+- [x] 4.2 `actionsReducer` links to each category via `handles` edges (tokenAction, zoneAction, aspectAction, economyAction, invokeAndDiceAction, …)
+- [x] 4.3 No overlap with `tsserver` facts — the reducer component (`actionsReducer`) and union contract (`campaignActionContract`) come from the deterministic source; the recipe added only the command taxonomy + `handles` edges
+- [ ] 4.4 Confirm the recipe is silent on a non-reducer project (regression) — not isolated yet (recipe is gated on shape detection; no non-reducer target run)
+- [x] 4.5 `likec4 validate` → `✓ Valid (2 files)` on the real model (backups excluded; see backup-glob note)

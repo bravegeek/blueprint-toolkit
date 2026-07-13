@@ -8,8 +8,8 @@
 
 ## 2. Validation
 
-- [ ] 2.1 Re-run `/assessment` on `fractal-table-vtt` (deferred to the user's next /assessment run)
-- [ ] 2.2 Confirm `actions 'Action Reducer'` (`lib/vtt/actions.ts#applyAction`) and `campaignAction` render `#provable`, not `#inferred`
-- [ ] 2.3 Confirm an INFERRED-only element (no deterministic source, e.g. a Next.js route) stays `#inferred`
-- [ ] 2.4 Confirm no duplicate elements for locations reported by both `tsserver` and `llm-assessment`
-- [ ] 2.5 `likec4 validate` passes once against the real target files after Pass 4
+- [x] 2.1 Re-ran `/assessment` on `fractal-table-vtt`
+- [x] 2.2 `actionsReducer` (`lib/vtt/actions.ts#applyAction`) and `campaignActionContract` (`#CampaignAction`) now render `#provable` (were `#inferred`)
+- [x] 2.3 INFERRED-only elements stayed `#inferred` (19 remain: routes, pages, recipe-sourced commands) — no blanket promotion
+- [x] 2.4 No duplicate elements; model has single elements per sourceLocation and validates
+- [x] 2.5 `likec4 validate` → `✓ Valid (2 files)` on the real model (backups excluded; see backup-glob note)
