@@ -14,6 +14,7 @@ specification {
   // ── Code-level modeling ────────────────────────────────────
   element component        // a public/exported class or primary construct within a service
   element contract         // a typed interface (protocol, abstract base, or interface) crossing module boundaries
+  element command          // an app/domain verb — a category of a reducer-dispatched action/command/event union
   element spec             // a specification-layer contract or design document reference
 
   // ── Relationship kinds ─────────────────────────────────────
@@ -26,6 +27,7 @@ specification {
   relationship claims
   relationship defines     // a service/component defines a contract
   relationship implements  // a component implements a contract
+  relationship handles     // a reducer/dispatcher handles a command category
 
   // ── Tags (cross-cutting concerns) ──────────────────────────
   // Add project-specific tags here.

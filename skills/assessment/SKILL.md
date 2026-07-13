@@ -108,13 +108,14 @@ Pass 3c produces a language-neutral intermediate extraction document (JSON) that
 
 **Confidence by construction**:
 - `tsserver` source → all facts are `PROVABLE` (compiler resolved them) with `evidence` containing `file:line`.
-- `llm-nextjs` and `llm-assessment` sources → all facts are `INFERRED` (convention-based or LLM inference) and may lack `evidence`.
+- `llm-nextjs`, `llm-reducer`, and `llm-assessment` sources → all facts are `INFERRED` (convention-based or LLM inference) and may lack `evidence`.
 - Confidence is a property of the *source* that produced a fact, not self-reported per-fact.
 
 **Disjoint fact sets**:
 - `tsserver` owns compiler-resolvable edges: imports, call hierarchy, `implements` relationships.
 - `llm-nextjs` owns framework-implicit edges: file-system routes, route handlers, client→API fetches, `'use client'` boundaries, auth wiring.
-- The recipe is scoped to prevent emitting edges `tsserver` already owns, so the union has no overlap.
+- `llm-reducer` owns the semantic decomposition of a reducer's action/command/event union into a `command` verb taxonomy (`handles` edges) — never the union *type* node, reducer *module* node, or import/call edge between them (those are `tsserver`'s).
+- Each recipe is scoped to prevent emitting facts `tsserver` already owns, so the union has no overlap.
 
 **No-leak rule**: Source-specific richness (tsserver's quickinfo, type strings, URI/range objects; LLM confidence hints; recipe reasoning traces) is mapped to format fields or dropped entirely. Nothing past the JSON boundary reaches Pass 4 or the `.c4` model.
 
@@ -450,6 +451,46 @@ Read the found file. Map which components call which methods on which other comp
 - Quote the file:line of the relationship (e.g., `src/pipeline/runner.py:42`).
 - Confidence: `PROVABLE` if the call is explicit in the code, `INFERRED` if inferred from naming patterns.
 
+#### Reducer / Command Discovery (if a discriminated-union + reducer shape is detected)
+
+Command-driven and event-sourced codebases (Redux, CQRS/event-sourcing, Elm/TEA, state machines, hand-rolled reducers) encode their whole behavioral grammar as a **discriminated-union of action/command/event types dispatched by a reducer**. That union is the most valuable behavioral artifact in the system — it enumerates every verb the domain supports. This recipe surfaces that grammar as `command` elements. It is a source-agnostic *shape* recipe, not tied to any framework.
+
+**Gate — detect the shape first (skip the recipe if absent):** a union type whose members share a discriminant field (e.g. `kind`/`type`), consumed by a `switch`/dispatch function over that discriminant. A discriminated union with **no** reducer/dispatch consumer is *not* a command set — do not emit commands for it.
+
+```bash
+# candidate reducers: a switch over a discriminant inside an exported dispatch fn
+grep -rnE "switch \(\w+\.(kind|type)\)" TARGET_PATH --include="*.ts" --include="*.tsx"
+# candidate command unions: an exported union type of *Action / *Command / *Event
+grep -rnE "^export type \w+(Action|Command|Event) =" TARGET_PATH --include="*.ts"
+```
+
+**Emit at category granularity — not leaves.** These unions are usually already a two-level tree (top union → mid-level categories → leaf variants). Emit the **mid-level categories** as `command` nodes (`kind: "command"`, `confidence: INFERRED`); treat the leaf variants as internal detail. Do **not** emit every leaf (a 37-leaf union becomes ~10 command nodes, not 37). Never invent a category absent from the type tree.
+
+- **Fallback for a flat union** (no mid-level categories): group members by discriminant prefix (e.g. `add-token`/`move-token` → `Token`) or, if no natural grouping, emit the single top-level union as one command. Still never one node per leaf.
+
+**Link the reducer to the grammar:** emit a `handles` edge from the reducer/dispatch element to each command category.
+
+**Disjointness (preserve the union contract):** this recipe owns *only* the semantic decomposition of the union into a verb taxonomy. It MUST NOT emit facts the `tsserver` source owns — the union *type* node, the reducer *module* node, or the plain import/call edge between them. Those come from the deterministic source; if a fact is compiler-resolvable, leave it out here.
+
+**Output of the reducer recipe** — a single JSON tagged `source: "llm-reducer"`, no format change (`command` rides `components[]` with `kind: "command"`; edge kinds ride the free-string `edges[].kind`):
+
+```json
+{
+  "source": "llm-reducer",
+  "language": "typescript",
+  "components": [
+    { "symbol": "TokenAction",   "file": "lib/vtt/actions.ts", "kind": "command", "confidence": "INFERRED" },
+    { "symbol": "AspectAction",  "file": "lib/vtt/actions.ts", "kind": "command", "confidence": "INFERRED" },
+    { "symbol": "EconomyAction", "file": "lib/vtt/actions.ts", "kind": "command", "confidence": "INFERRED" }
+  ],
+  "contracts": [],
+  "edges": [
+    { "from": "lib/vtt/actions.ts#applyAction", "to": "TokenAction",   "kind": "handles", "confidence": "INFERRED" },
+    { "from": "lib/vtt/actions.ts#applyAction", "to": "EconomyAction", "kind": "handles", "confidence": "INFERRED" }
+  ]
+}
+```
+
 #### TypeScript / JavaScript
 
 **Components** (exported classes *or* cohesive functional modules):
@@ -493,6 +534,7 @@ Each extraction source emits its own JSON file conforming to the format above, w
 - Always run the default LLM extraction (`source: "llm-assessment"`).
 - If the project is warm (has a type system installed), run deterministic extractors (e.g., `source: "tsserver"` for TypeScript).
 - If the project is detected as a Next.js app, run the framework recipe (`source: "llm-nextjs"`).
+- If a discriminated-union + reducer-dispatch shape is detected, run the reducer/command recipe (`source: "llm-reducer"`).
 
 The union is over disjoint fact sets (AND, not OR — all present sources contribute, no fallback). **Pass 4 consumes the complete unioned output.**
 
@@ -521,7 +563,7 @@ For each spec directory found:
 
 ### Code-level element synthesis (from extraction format)
 
-**Input:** Unioned extraction JSON from Pass 3c containing contributions from all available sources (e.g., `source: "tsserver"`, `source: "llm-nextjs"`, `source: "llm-assessment"`).
+**Input:** Unioned extraction JSON from Pass 3c containing contributions from all available sources (e.g., `source: "tsserver"`, `source: "llm-nextjs"`, `source: "llm-reducer"`, `source: "llm-assessment"`).
 
 **Processing:**
 
@@ -533,7 +575,7 @@ For each spec directory found:
 
 3. **Source attribution**: Each element carries provenance in its `source` field. Use this to determine which source supplied the reconciled confidence and to debug overlaps. Edge fact sets are disjoint (overlapping *edges* are errors to investigate); node identity overlap on the *same* `sourceLocation` is expected and is resolved by the step-1 map, not treated as an error.
 
-4. **Nesting**: Nest all `component` and `contract` elements under their parent `service` (inferred from Pass 1's service mapping).
+4. **Nesting**: Nest all `component`, `contract`, and `command` elements under their parent `service` (inferred from Pass 1's service mapping). A `command` from the reducer recipe nests under the service that owns its reducer.
 
 5. **Confidence → tags**: The tag is derived from the step-1 reconciliation map's **strongest** confidence for the element's `sourceLocation` — never from the LLM's own confidence impression (confidence is a property of the best available evidence for a location, not a value an LLM self-reports). For each element:
    - If the reconciled strongest confidence is `PROVABLE` → add `#provable` tag. This holds even when an LLM source (`llm-assessment`) also described the same `sourceLocation` as `INFERRED`: an INFERRED description MUST NOT downgrade a PROVABLE resolution of the same location.
@@ -634,15 +676,17 @@ If no `specs/*/contracts/` directories were found:
 
 ### Code-level views
 
-For each service with components, generate a `codeStructure` view:
+For each service with components, generate a `codeStructure` view. This is where `command` elements belong — the code-structure (or a dedicated engine/domain) view shows the reducer and the command taxonomy it `handles`:
 
 ```
 view codeStructure_ingestor {
   title "Ingestor — Code Structure"
-  include ingestor.**  // all nested components and contracts
+  include ingestor.**  // all nested components, contracts, and commands
   autoLayout LeftRight
 }
 ```
+
+Keep `command` elements **out of the top-level architecture views** (`index`, `context`, `services`) by default — the verb taxonomy is code-level detail, not system topology. If those views would pull commands in via a broad `include`, exclude them (e.g. `exclude command`).
 
 ### Views to Propose
 
