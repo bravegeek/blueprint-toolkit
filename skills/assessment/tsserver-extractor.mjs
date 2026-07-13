@@ -73,109 +73,118 @@ class TsserverExtractor {
   }
 
   /**
-   * Simple fallback extractor using regex and AST parsing on source files
-   * This avoids tsserver protocol complexity for the walking skeleton
+   * Regex-based walking-skeleton extractor over source files.
+   *
+   * Three passes, so that structural significance is decided by cross-module
+   * IMPORT EVIDENCE (not export shape):
+   *   A. Collect every exported declaration (class | interface | type | function |
+   *      const | default) and every import occurrence.
+   *   B. Keep an export as a component/contract only if it is imported by a
+   *      DIFFERENT module (class-free functional modules and type-alias/union
+   *      contracts included; single-use exports dropped as internal detail).
+   *   C. Emit an edge for each cross-module import that resolves to a known
+   *      export, with the importing file as `from` and `file:line` evidence.
    */
   extractFromSource(files) {
-    const processedSymbols = new Set();
+    const exportsBySymbol = new Map();   // symbol → { symbol, file, kind, line }
+    const importOccurrences = [];        // { symbol, file, line }
 
     for (const file of files) {
       const fullPath = path.join(this.projectRoot, file);
-
+      let source;
       try {
-        const source = fs.readFileSync(fullPath, 'utf8');
-        const lines = source.split('\n');
+        source = fs.readFileSync(fullPath, 'utf8');
+      } catch (e) {
+        continue; // skip unreadable files
+      }
 
-        // Extract exported classes, interfaces, types, functions
-        for (let i = 0; i < lines.length; i++) {
-          const line = lines[i];
-          const lineNum = i + 1;
-          const relFile = file.replace(/\\/g, '/');
+      const lines = source.split('\n');
+      const relFile = file.replace(/\\/g, '/');
 
-          // Match: export class/interface/type/function
-          const exportMatch = line.match(/^export\s+(class|interface|type|async\s+function|function)\s+(\w+)/);
-          if (exportMatch) {
-            const [, kind, symbol] = exportMatch;
-            const key = `${relFile}#${symbol}`;
-
-            if (!processedSymbols.has(key)) {
-              processedSymbols.add(key);
-
-              if (kind === 'interface' || kind === 'type') {
-                this.contracts.set(symbol, {
-                  symbol,
-                  file: relFile,
-                  kind: kind === 'interface' ? 'interface' : 'type',
-                  confidence: 'PROVABLE',
-                  evidence: `${relFile}:${lineNum}`,
-                });
-              } else if (kind.includes('class') || kind.includes('function')) {
-                this.components.set(symbol, {
-                  symbol,
-                  file: relFile,
-                  module: path.dirname(relFile),
-                  exported: true,
-                  confidence: 'PROVABLE',
-                });
-              }
-            }
-          }
-
-          // Match imports to detect edges
-          const importMatch = line.match(/^import\s+(?:type\s+)?(?:\{([^}]+)\}|\*\s+as\s+(\w+)|(\w+))/);
-          if (importMatch) {
-            const [, named, star, defaultImport] = importMatch;
-            if (named) {
-              const symbols = named.split(',').map((s) => s.trim().split(/\s+as\s+/)[0]);
-              for (const sym of symbols) {
-                if (sym) {
-                  this.edges.add({
-                    from: this.extractCurrentModule(lines, i),
-                    to: sym,
-                    kind: 'imports',
-                    confidence: 'PROVABLE',
-                    evidence: `${relFile}:${lineNum}`,
-                  });
-                }
-              }
-            }
-          }
-
-          // Match class methods calling other classes
-          const classDefMatch = line.match(/^(?:export\s+)?class\s+(\w+)/);
-          if (classDefMatch) {
-            const className = classDefMatch[1];
-            // Simple pattern: new SomeClass() or someClass.method()
-            for (let j = i + 1; j < Math.min(i + 50, lines.length); j++) {
-              const methodLine = lines[j];
-              const newMatch = methodLine.match(/new\s+(\w+)\(/);
-              if (newMatch) {
-                const instantiated = newMatch[1];
-                if (instantiated !== className) {
-                  this.edges.add({
-                    from: className,
-                    to: instantiated,
-                    kind: 'instantiates',
-                    confidence: 'PROVABLE',
-                    evidence: `${relFile}:${j + 1}`,
-                  });
-                }
-              }
-            }
+      // Exported declarations (single-line) — classes AND functional exports
+      // (const/function) AND contracts (interface/type). This is the widened
+      // enumeration: functions and type aliases are first-class, not just classes.
+      for (let i = 0; i < lines.length; i++) {
+        const exportMatch = lines[i].match(
+          /^export\s+(?:default\s+)?(abstract\s+class|class|interface|type|async\s+function|function|const)\s+(\w+)/
+        );
+        if (exportMatch) {
+          const kind = exportMatch[1].replace(/^abstract\s+/, '').replace(/^async\s+/, '');
+          const symbol = exportMatch[2];
+          if (!exportsBySymbol.has(symbol)) {
+            exportsBySymbol.set(symbol, { symbol, file: relFile, kind, line: i + 1 });
           }
         }
-      } catch (e) {
-        // Silently skip files that can't be read
+      }
+
+      // Import occurrences — named / namespace / default. Scanned over the whole
+      // source so MULTI-LINE named imports (one symbol per line) are captured;
+      // line-by-line matching silently dropped those and undercounted evidence.
+      const importRe =
+        /import\s+(?:type\s+)?(?:\{([^}]*)\}|\*\s+as\s+(\w+)|(\w+))\s+from\s*['"][^'"]+['"]/g;
+      let m;
+      while ((m = importRe.exec(source)) !== null) {
+        const [, named, star, dflt] = m;
+        const lineNum = source.slice(0, m.index).split('\n').length;
+        const names = [];
+        if (named) {
+          named.split(',').forEach((s) => {
+            const n = s.trim().replace(/^type\s+/, '').split(/\s+as\s+/)[0];
+            if (n) names.push(n);
+          });
+        }
+        if (star) names.push(star);
+        if (dflt) names.push(dflt);
+        for (const n of names) {
+          importOccurrences.push({ symbol: n, file: relFile, line: lineNum });
+        }
       }
     }
-  }
 
-  /**
-   * Extract the current module name from file path
-   */
-  extractCurrentModule(lines, upToLine) {
-    // Look for: export default | module export | try to infer from structure
-    return 'unknown';
+    // Pass B — significance = imported by a DIFFERENT module (import evidence,
+    // not export shape). Class-free functional modules and union-type contracts
+    // survive; single-use exports are dropped as internal detail.
+    for (const { symbol, file, kind, line } of exportsBySymbol.values()) {
+      const crossModule = importOccurrences.some(
+        (o) => o.symbol === symbol && o.file !== file
+      );
+      if (!crossModule) continue;
+
+      if (kind === 'interface' || kind === 'type') {
+        this.contracts.set(symbol, {
+          symbol,
+          file,
+          kind, // "interface" | "type" (type-alias / discriminated union)
+          confidence: 'PROVABLE',
+          evidence: `${file}:${line}`,
+        });
+      } else {
+        // class | function | const → a component. A functional module is emitted
+        // as a component exactly like a class.
+        this.components.set(symbol, {
+          symbol,
+          file,
+          module: path.dirname(file),
+          exported: true,
+          confidence: 'PROVABLE',
+        });
+      }
+    }
+
+    // Pass C — resolved cross-module edges only. `from` is the importing file
+    // (fixes the previous 'unknown'); unresolved imports are not faked.
+    for (const { symbol, file, line } of importOccurrences) {
+      const def = exportsBySymbol.get(symbol);
+      if (!def || def.file === file) continue; // unresolved or same-module
+      const kind = def.kind === 'interface' || def.kind === 'type' ? 'references' : 'imports';
+      this.edges.add({
+        from: file,
+        to: symbol,
+        kind,
+        confidence: 'PROVABLE',
+        evidence: `${file}:${line}`,
+      });
+    }
   }
 
   /**

@@ -325,25 +325,31 @@ If module A imports module B, A is downstream of B. Derive a soft DAG from impor
 
 ### 3c — Component and Contract Discovery
 
-**Goal:** Within each service/module found in Pass 1, identify the primary classes (structural units) and the typed interfaces that cross module boundaries (contracts). Emit the code-level extraction format (JSON), defaulting LLM-derived entries to INFERRED and requiring quoted file:line evidence for PROVABLE.
+**Goal:** Within each service/module found in Pass 1, identify the structural units (components) and the typed interfaces that cross module boundaries (contracts). Emit the code-level extraction format (JSON), defaulting LLM-derived entries to INFERRED and requiring quoted file:line evidence for PROVABLE.
+
+**What counts as a component (language-neutral):** A `component` is an exported **class** *or* a cohesive **functional module** — a single source file whose exported functions, constants, and types form one structural unit. The presence or absence of a class does not decide whether a module is emitted. Emit the *module* as one component (named after a dominant exported symbol — a reducer, a class — or the file), not each function as its own node.
+
+**What decides structural significance (language-neutral):** cross-module **import evidence**, not export shape. A module is structural if at least one of its exports is imported by a *different* module — regardless of whether those exports look like "helpers" or "utilities." A cohesive domain directory (many mutually-referencing modules under one path) *reinforces* significance and can drive grouping, but is a secondary signal only, never hardcoded to a project's paths. Modules whose exports are never imported outside themselves are internal detail — skip them.
+
+**What counts as a contract (language-neutral):** an exported **interface** *or* an exported **type alias** (including discriminated-union types) imported across module boundaries. A union type imported by another module is a contract exactly the way an interface is; record `kind` as `"type"` or `"interface"`.
 
 **Language-specific extraction rules:**
 
 #### Python
 
-**Components** (exported classes):
-- Classes listed in `__all__` are exported.
-- Classes imported by other modules (detected via cross-module `from X import Y` patterns) are exported.
-- Model only classes with structural significance — primary controllers, providers, repositories. Skip helpers, utilities, and test doubles.
+**Components** (exported classes *or* cohesive functional modules):
+- Classes and functions listed in `__all__` are exported.
+- Classes/functions imported by other modules (detected via cross-module `from X import Y` patterns) are exported.
+- A module of exported functions (no class) that is imported by another module is a component — emit the *module*, not each function. Do **not** skip it for lacking a class or for looking like a "utility"; the import evidence is what makes it structural.
 
 ```bash
-grep -rn "^class " TARGET_PATH --include="*.py" | grep -v "test_\|Test" | sort
+grep -rnE "^(class |def |async def )" TARGET_PATH --include="*.py" | grep -v "test_\|Test" | sort
 ```
 
-Read each class and check:
+Read each candidate and check:
 1. Is it in `__all__`? → `exported: true`, confidence `INFERRED`.
 2. Is it imported by another module? → `exported: true`, confidence `PROVABLE` (quote the import line).
-3. Is it only used internally? → skip (internal detail).
+3. Are its exports only used within the module? → skip (internal detail).
 
 **Contracts** (typed interfaces crossing module boundaries):
 - `typing.Protocol`, `abc.ABC`, `dataclass` types used across modules.
@@ -446,30 +452,34 @@ Read the found file. Map which components call which methods on which other comp
 
 #### TypeScript / JavaScript
 
-**Components** (exported classes):
-- Classes with `export` keyword are exported.
-- Model only classes with structural significance — primary controllers, providers, repositories.
+**Components** (exported classes *or* cohesive functional modules):
+- A source file is a component if any of its exports (`export class`, `export function`, `export const`, `export default`) is imported by a *different* module. Emit the module as one component; do not split it per function.
+- Do **not** skip a module for lacking a class or for looking like a "utility." A class-free module of functions imported cross-module (e.g. a reducer, a rules module) is a first-class component — that is exactly the case the old class-only grep dropped.
 
 ```bash
-grep -rn "^export class " TARGET_PATH/src --include="*.ts" | sort
+# candidate exports — classes AND functional exports, not classes alone
+grep -rnE "^export (class|(async )?function|const|default) " TARGET_PATH --include="*.ts" --include="*.tsx" | sort
+# who imports whom (cross-module evidence: the significance test)
+grep -rnE "^import .* from ['\"]" TARGET_PATH --include="*.ts" --include="*.tsx" | sort
 ```
 
-Read each class. Confidence:
-- If explicitly exported → `INFERRED` (LLM identified it).
+Read each candidate module. Confidence:
+- If explicitly exported and LLM-identified → `INFERRED`.
 - If imported and used by another module → `PROVABLE` (quote the import line).
 
-**Contracts** (exported interfaces/types crossing module boundaries):
-- `export interface` and `export type` declarations.
+**Contracts** (exported interfaces *or* type aliases crossing module boundaries):
+- `export interface` **and** `export type` declarations, including discriminated-union types (`export type X = A | B | ...`).
 - Types/interfaces referenced in imports across modules.
 
 ```bash
-grep -rn "^export interface\|^export type" TARGET_PATH/src --include="*.ts" | sort
-grep -rn "import.*{ [A-Z]" TARGET_PATH/src --include="*.ts" | sort
+grep -rnE "^export (interface|type) " TARGET_PATH --include="*.ts" --include="*.tsx" | sort
+grep -rnE "^import (type )?\{ [A-Z]" TARGET_PATH --include="*.ts" --include="*.tsx" | sort
 ```
 
 Read each interface/type:
 - If consumed by a different module → it's a cross-module contract.
   - Add to `contracts[]` with `kind: "interface"` or `"type"`.
+  - A union type imported by another module is a contract exactly like an interface — do not drop it for being a `type` rather than an `interface`.
   - If you can quote an import in another module → confidence `PROVABLE`, include `evidence`.
   - Otherwise → confidence `INFERRED`.
 - If only used internally → skip.
@@ -515,6 +525,8 @@ For each spec directory found:
 
 **Processing:**
 
+> **PROVABLE facts are ground truth — do not curate them out.** A component or contract that a deterministic source (`tsserver`) reports with cross-module import evidence is `PROVABLE`, and (per the Confidence Tiers table) PROVABLE ranks with STRUCTURAL as auto-stageable. Every such module MUST be represented by a component, and every such cross-module type (interface *or* discriminated-union `type`, e.g. an action/command union) MUST be represented by a contract. **Do not drop a PROVABLE cross-module component or contract on "primary / significant / it's just a helper" grounds** — that "keep only the important ones" curation applies **only to INFERRED items**, never to PROVABLE ones. The load-bearing seams of a functional codebase (a reducer like `applyAction`, the action/command union it dispatches) are exactly the PROVABLE facts most easily lost to over-curation; they are not optional. You may still choose naming, nesting, descriptions, and which INFERRED items to include — you may not choose to omit a PROVABLE cross-module fact.
+
 1. **Match on sourceLocation**: For each component/contract in the extraction, check if an element with matching `sourceLocation` metadata already exists in the model. If it does, update it (re-assessment scenario, no duplication). If it doesn't, add it.
 
 2. **Source attribution**: Each element carries provenance in its `source` field. Use this to determine confidence and to debug any overlaps (the union should be over disjoint fact sets, so overlaps are errors to investigate).
@@ -529,7 +541,7 @@ For each spec directory found:
 
 5. **Metadata**: Add `sourceLocation` metadata: `metadata { sourceLocation '<repo-relative-path>#<SymbolName>' }`. Include source attribution if debugging: `metadata { sourceLocation '<repo-relative-path>#<SymbolName>', source '<source-id>' }`.
 
-6. **Cross-module evidence filter**: Drop any component or contract entry from the extraction if it has no cross-module evidence (e.g., a component that is never imported outside its module, a protocol only used internally). These are implementation details, not structural elements.
+6. **Cross-module evidence filter**: The filter tests **import evidence, not export shape.** Keep any component or contract whose exports are imported by a *different* module — this includes class-free functional modules (e.g. a reducer, a rules module) and type-alias/discriminated-union contracts, which earlier class-only heuristics wrongly dropped as "utilities." Drop only entries with no cross-module evidence (exports never imported outside their own module) — those are implementation detail. Granularity stays **module-level**: one `component` per functional module (named after a dominant export or the file), never one per function. This adds no new element kinds and no format change — functional modules are `component`s and union types are `contract`s exactly like classes and interfaces.
 
 **Example output (from extraction):**
 
