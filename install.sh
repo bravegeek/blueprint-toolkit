@@ -11,11 +11,15 @@
 #                 in an agent's discovery path with the wrapper symlink. Model
 #                 files (system.c4, views.c4, .likec4rc) are never overwritten,
 #                 even with --force, since they hold your project's own content.
-#   --clean       Reset system.c4 and views.c4 to the blank toolkit templates,
-#                 so you can re-run /assessment from scratch. The existing
-#                 files are backed up first (see below), never just deleted.
-#                 Prompts for confirmation unless --yes is also passed.
-#                 .likec4rc (project name) is left untouched.
+#   --clean       Reset system.c4 and views.c4 to the blank toolkit templates
+#                 AND refresh the toolkit's skill/machinery files (skills,
+#                 AGENTS.md, .mcp.json, wrappers, blueprint/bin) to their
+#                 current versions, so you can re-run /assessment from scratch
+#                 with up-to-date logic. Implies --force for these non-model
+#                 files (so combining with --force is harmless/redundant). The
+#                 existing model files are backed up first (see below), never
+#                 just deleted. Prompts for confirmation unless --yes is also
+#                 passed. .likec4rc (project name) is left untouched.
 #   --yes         Skip the confirmation prompt for --clean.
 #   target-dir    Project to install into (default: current directory)
 #   project-name  LikeC4 project name written to .likec4rc
@@ -64,7 +68,6 @@ while [ $# -gt 0 ]; do
     *) break ;;
   esac
 done
-[ "$CLEAN" -eq 0 ] || [ "$FORCE" -eq 0 ] || fail "--force and --clean cannot be combined"
 
 TARGET_DIR=${1:-$PWD}
 PROJECT_NAME=${2:-}
@@ -106,8 +109,14 @@ if [ "$CLEAN" -eq 1 ]; then
   cp "$SRC_DIR/blueprint/model/system.c4" "$SYS_C4"
   cp "$SRC_DIR/blueprint/model/views.c4" "$VIEWS_C4"
   printf 'Reset system.c4 and views.c4 to blank templates.\n\n'
-  printf 'Next step: run /assessment . to model the existing system from scratch.\n'
-  exit 0
+
+  # Fall through into the normal install flow to refresh the toolkit's skill/
+  # machinery files (skills, AGENTS.md, wrappers, blueprint/bin, .mcp.json) to
+  # their current versions — a from-scratch assessment must run current logic,
+  # not whatever stale copy was installed before. Force overwrites those non-
+  # model files; the model stays protected because is_protected still shields
+  # system.c4/views.c4/.likec4rc, which were just reset from template above.
+  FORCE=1
 fi
 
 # Ask for the project name if not given and we have a terminal.
