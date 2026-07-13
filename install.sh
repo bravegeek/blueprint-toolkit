@@ -97,14 +97,27 @@ if [ "$CLEAN" -eq 1 ]; then
     fi
   fi
 
-  # Must live outside blueprint/model/ — that's the LikeC4 workspace root, and
-  # a backup .c4 file left inside it gets globbed too, causing duplicate
-  # element definitions on the next `likec4 validate`.
+  # Migrate any pre-existing globbable backups. Earlier runs wrote *.c4 files
+  # here; LikeC4 globs *.c4 recursively across the project (the .backup dir is
+  # NOT outside its workspace, contrary to what this comment used to claim), so
+  # those backups get pulled in and their duplicate specification blocks break
+  # `likec4 validate`. Rename them to *.c4.bak. Idempotent: *.c4.bak no longer
+  # matches the *.c4 glob, and `find -name '*.c4'` does not re-match it.
+  if [ -d "$TARGET_DIR/blueprint/.backup" ]; then
+    find "$TARGET_DIR/blueprint/.backup" -type f -name '*.c4' | while IFS= read -r f; do
+      mv "$f" "$f.bak"
+    done
+  fi
+
+  # Store backups as *.c4.bak (not *.c4) so LikeC4's *.c4 glob never matches
+  # them, wherever its workspace root actually is. The filename — not the
+  # directory location — is what keeps a backup from polluting validation.
   BACKUP_DIR="$TARGET_DIR/blueprint/.backup/$(date +%Y%m%d-%H%M%S)"
   mkdir -p "$BACKUP_DIR"
-  cp "$SYS_C4" "$BACKUP_DIR/system.c4"
-  [ -f "$VIEWS_C4" ] && cp "$VIEWS_C4" "$BACKUP_DIR/views.c4"
-  printf 'Backed up current model files to %s\n' "$BACKUP_DIR"
+  cp "$SYS_C4" "$BACKUP_DIR/system.c4.bak"
+  [ -f "$VIEWS_C4" ] && cp "$VIEWS_C4" "$BACKUP_DIR/views.c4.bak"
+  printf 'To restore a backup, rename system.c4.bak -> system.c4 (and views.c4.bak -> views.c4)\nand copy it back into blueprint/model/.\n' > "$BACKUP_DIR/RESTORE.txt"
+  printf 'Backed up current model files to %s (as .c4.bak, inert to likec4)\n' "$BACKUP_DIR"
 
   cp "$SRC_DIR/blueprint/model/system.c4" "$SYS_C4"
   cp "$SRC_DIR/blueprint/model/views.c4" "$VIEWS_C4"
