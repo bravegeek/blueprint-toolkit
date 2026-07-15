@@ -15,6 +15,7 @@ specification {
   element component        // a public/exported class or primary construct within a service
   element contract         // a typed interface (protocol, abstract base, or interface) crossing module boundaries
   element command          // an app/domain verb — a category of a reducer-dispatched action/command/event union
+  element rule             // a developer-authored domain rule / policy / invariant (never inferred; AMBIGUOUS tier)
   element spec             // a specification-layer contract or design document reference
 
   // ── Relationship kinds ─────────────────────────────────────
@@ -28,6 +29,7 @@ specification {
   relationship defines     // a service/component defines a contract
   relationship implements  // a component implements a contract
   relationship handles     // a reducer/dispatcher handles a command category
+  relationship governs     // a domain rule governs the component/contract/command that enforces it
 
   // ── Tags (cross-cutting concerns) ──────────────────────────
   // Add project-specific tags here.

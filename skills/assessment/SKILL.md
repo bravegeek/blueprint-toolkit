@@ -699,6 +699,7 @@ view index {
   include system.*                   // one level of children inside the system (services, datastores, etc.)
                                       // NOTE: unscoped `include *` does NOT descend into nested elements —
                                       // it must be paired with an explicit `<system>.*` (or `.**`) to show internals.
+  exclude rule                       // domain rules are code-level detail — never in architecture views
 }
 
 view context {
@@ -711,6 +712,7 @@ view context {
 view services {
   title "[system] — Services"
   include system, system.serviceA, system.serviceB, ...   // services only, no components
+  exclude rule
   autoLayout TopBottom
 }
 
@@ -732,6 +734,17 @@ view contracts {
   title "[system] — Cross-Module Contracts"
   include system.moduleA.contractX, system.moduleB.contractY, ...
   autoLayout TopBottom
+}
+```
+
+If domain `rule` elements were elicited from the developer (see Confirm), also propose — this is the **only** view that shows rules, keeping them out of the architecture views above:
+
+```
+view domainRules {
+  title "[system] — Domain Rules"
+  include rule                       // every developer-authored rule
+  include rule -> *                  // and the elements each rule governs
+  autoLayout LeftRight
 }
 ```
 
@@ -762,10 +775,47 @@ view service1Spec {
 
 ## Confirm
 
-Present the proposed `.c4` and ask only about INFERRED and AMBIGUOUS items:
+Present the proposed `.c4` and ask only about INFERRED and AMBIGUOUS items.
 
-1. **INFERRED check** — list each inferred relationship with its evidence. "We inferred X because Y — is that right?"
-2. **Gap check** — "What does this miss that the code doesn't make visible?" (business logic, external integrations, user actors)
-3. **Metadata** — "What `owner`, `dataClassification`, and `auth` values should be added?"
+### How to ask — disambiguation clarity (applies to every question below)
+
+Every question you put to the developer about an INFERRED or AMBIGUOUS item MUST be answerable by someone who does not know this skill's internal modeling vocabulary. For each question, state three things plainly:
+
+1. **What is being decided** — the concrete thing, in the developer's terms (a file, a module, a behavior), not in modeling jargon.
+2. **Why it matters** — what the choice changes in the resulting model/diagram.
+3. **What each option implies** — spell out the consequence of each choice so the options are distinguishable without inference.
+
+Always present the **explicit options** and **clearly mark the default**. Clarity augments the options; it never replaces them. A developer who accepts the default should be making an informed choice, not defaulting because the question was unclear. If a modeling term is unavoidable, define it inline.
+
+**Before / after (the phrasing bar):**
+
+> ❌ *"Should we model `CampaignAction` and `CampaignState` as contracts?"*
+> — assumes the reader knows what "contract" means here and what modeling-vs-not changes.
+>
+> ✅ *"`CampaignAction` is the list of every action players can take (move token, spend fate, …), and `Room` on the server applies them. Do you want it shown in the diagram as a labelled boundary between the game rules and the server?*
+> *• **Yes (default)** — adds one `CampaignAction` box the server and client both point at; makes the rules↔server seam visible.*
+> *• No — leaves it out; the diagram stays smaller but the seam is implicit."*
+
+### Domain rules — elicit, never infer
+
+The code shows *that* `applyAction` runs and *that* `redaction.ts` is imported; it cannot show the **rules** — "invoking an aspect costs a fate point", "GM secrets are redacted before reaching players". These are `rule` elements, and they are **`AMBIGUOUS` tier: developer-authored only.** You MUST NOT invent, infer, or LLM-author the content of a rule.
+
+What you *may* do is propose **candidate rule slots** from structural signals you already have, and ask the developer to fill or reject them:
+
+- a module named/shaped like redaction, authorization, or a policy check → "there may be a secrecy/permission rule here — what is it?"
+- a `command` category or component group that clearly implements an economy/lifecycle/permission concern → "what rule governs these actions?"
+
+For each slot the developer confirms:
+- Record their rule text **verbatim in intent** as the `rule` element's description — do not paraphrase it into a guess.
+- Emit the `rule` element with **no `#provable`/`#inferred` tag** (rules are developer-confirmed, not source-derived).
+- Attach it with a `governs` relationship to **each** enforcing element (component, contract, or command).
+- If the developer rejects a slot or has no rule, emit nothing for it.
+
+### The checks
+
+1. **INFERRED check** — list each inferred relationship with its evidence, phrased to the clarity bar above. "We inferred X because Y — is that right? (Yes keeps the edge; No removes it.)"
+2. **Rule slots** — present each candidate slot as a question; capture confirmed rules as `rule` elements per the elicitation rules above.
+3. **Gap check** — "What does this miss that the code doesn't make visible?" (business logic, external integrations, user actors)
+4. **Metadata** — "What `owner`, `dataClassification`, and `auth` values should be added, and to which elements?"
 
 When the developer confirms, commit the `.c4` model.
