@@ -129,23 +129,17 @@ Pass 3c produces a language-neutral intermediate extraction document (JSON) that
 
 **Steps:**
 
-**If `TARGET_PATH` is inside a git repo, prefer this form** — it avoids escaped-paren shell grouping (`\( \)`) entirely, which some tool-call/permission parsers choke on when the command is long or multi-line:
+**Run the discovery scanner — one call, not a handful of ad-hoc greps.** The scanner replaces every hand-written `find`/`grep`/`git ls-files` this pass used to run one at a time. It is a stable, pre-approvable command (allowlisted once as `Bash(bash .../scan.sh:*)`), it is portable to any harness that can run a shell, and it avoids the escaped-paren/pipe forms that trip permission parsers into unclassifiable prompts:
 
 ```bash
-git -C TARGET_PATH ls-files | grep -E '\.(py|ts|tsx|toml|cfg)$|(^|/)(docker-compose.*\.yml|Makefile|pyproject\.toml|requirements.*\.txt|Procfile|package\.json|go\.mod|Cargo\.toml|\.env.*)$' | sort
+bash skills/assessment/scan.sh TARGET_PATH 1
 ```
 
-**Otherwise (no git repo), fall back to `find`:**
+This emits `FILE_INVENTORY`, `STACK_SIGNALS`, `SERVICE_ROOTS`, `ORCHESTRATOR`, and `FRAMEWORK` sections in one shot. (Run `scan.sh TARGET_PATH all` to get the Pass 3 sections too; `scan.sh TARGET_PATH 3` for just those.) The scanner is read-only and executes no application code.
 
-```bash
-find TARGET_PATH -maxdepth 4 \( -name "*.py" -o -name "docker-compose*.yml" -o -name "Makefile" -o -name "*.toml" -o -name "pyproject.toml" -o -name "*.cfg" -o -name "requirements*.txt" -o -name "Procfile" -o -name "*.env" -o -name ".env*" \) -not -path "*/.*" -not -path "*/__pycache__/*" -not -path "*/node_modules/*" | sort
-```
+The scanner surfaces **candidates and signals**, never final facts — you still read the files it points at to confirm. If your stack needs extensions or config names the defaults miss, edit the tunables at the top of `scan.sh` (they are commented) rather than reintroducing inline greps. Only drop to a raw `find`/`grep` for a genuinely one-off follow-up the scanner does not cover — and keep any such command on a single line, since escaped parens plus line-continuations can trip a permission/safety parser even when the shell syntax is valid.
 
-Adapt the file extensions and config filenames to your stack (e.g. add `*.ts`, `go.mod`, `Cargo.toml`, `package.json` as appropriate).
-
-**Always keep the actual tool-call command on a single line, whichever form you use.** Backslash line-continuations are for human readability in this doc only — carrying them verbatim into a tool-call argument, especially combined with escaped parens, can trip a permission/safety parser into an unclassifiable "parse error" prompt even though the shell syntax is valid. Expand any pattern list inline on one line instead.
-
-From the layout, determine:
+From the scanner output, determine:
 - **Service count** — multiple `main.py` / `app.py` / `index.ts` / `main.go` at different directory levels = multiple services (STRUCTURAL)
 - **Pipeline shape** — directory names like `ingest/`, `process/`, `transform/`, `export/`, `load/` signal a pipeline structure (INFERRED)
 - **Stack identity** — presence of `docker-compose.yml`, `pyproject.toml`, `package.json`, `go.mod`, `Cargo.toml`, `Makefile`, `Procfile`
@@ -238,6 +232,14 @@ If no `docker-compose.yml` exists, look for `kubernetes/`, `helm/`, `fly.toml`, 
 **Goal:** Read the code layer — module relationships, data flow signals, pipeline sequencing. Pure static analysis, no execution.
 
 Use findings from Pass 1 (service roots, orchestrator type) to scope what's read.
+
+**Get this pass's discovery signals from the scanner in one call**, rather than running the greps below one at a time:
+
+```bash
+bash skills/assessment/scan.sh TARGET_PATH 3
+```
+
+Its sections map directly onto the sub-steps here: `PY_COMPONENTS` / `TS_EXPORTS` → component candidates (3c), `PY_CONTRACTS` / `TS_CONTRACTS` → contract candidates (3c), `TS_IMPORTS` → the cross-module import evidence that decides significance, `REDUCER_SHAPE` → the reducer/command recipe gate, `SPEC_CONTRACTS` → spec-layer detection. The `ORCHESTRATOR` section from Pass 1 covers 3b. The `grep`/`find` blocks below **document what each section matches and remain the reference for adapting patterns to a new stack** — you don't re-run them by hand when the scanner already emits the section. Read the candidate lines the scanner returns, open the files, and confirm; the scanner finds, it does not decide.
 
 ### 3a — Module Graph
 

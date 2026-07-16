@@ -119,6 +119,7 @@ This is the join key for deterministic extraction: when a future AST extractor o
 | `blueprint/bin/likec4` | Wrapper CLI — always use this instead of a bare `likec4`/`npx likec4` |
 | `.mcp.json` | LikeC4 MCP server — read-only model query |
 | `skills/assessment/SKILL.md` | Four-pass system analysis with code-level extraction |
+| `skills/assessment/scan.sh` | Read-only discovery scanner for assessment Passes 1 & 3. One portable call — `bash skills/assessment/scan.sh <target> [1\|3\|all]` — replacing the ad-hoc find/grep sweeps. Emits sectioned plain text; surfaces candidates, never final facts. Any agent with a shell can run it. |
 | `skills/blueprint-change/SKILL.md` | Ticket → EARS → .c4 diff (includes code-level impact check) |
 
 ## LikeC4 Syntax Quick Reference
