@@ -16,6 +16,9 @@ Catching a wrong structure in a diagram takes a conversation. Catching it in cod
 blueprint-toolkit/
 ├── skills/
 │   ├── assessment/        # Read system → propose .c4 model
+│   │   ├── SKILL.md       # Lean, procedure-only runtime steps
+│   │   ├── reference/     # Confidence tiers, extraction format, stack probes
+│   │   └── extractors/    # Deterministic/framework code-extraction scripts
 │   └── blueprint-change/  # Ticket → EARS → .c4 diff → review gate
 ├── blueprint/
 │   ├── model/
@@ -26,19 +29,29 @@ blueprint-toolkit/
 │       └── likec4         # Wrapper: run this instead of `likec4` directly
 ├── AGENTS.md              # What agents read
 ├── .mcp.json              # LikeC4 MCP (read-only)
-├── install.sh             # Copies the above into your project
+├── install.sh             # init / add-skill / doctor CLI
+├── bootstrap.sh           # One-command remote onboarding (curl | bash)
 └── QUICKSTART.md
 ```
 
 ## How To Use It
 
+Cloned the repo already:
+
 ```bash
-./install.sh /path/to/your-project
+./install.sh init /path/to/your-project
+./install.sh add-skill assessment /path/to/your-project
 ```
 
-Then point it at your code. See `QUICKSTART.md`.
+No clone yet — one command:
 
-To reset `system.c4`/`views.c4` back to blank templates and re-run `/assessment` from scratch (backing up the current model first), use `./install.sh --clean /path/to/your-project`.
+```bash
+curl -fsSL https://raw.githubusercontent.com/bravegeek/blueprint-toolkit/main/bootstrap.sh | bash -s -- init /path/to/your-project
+```
+
+Both paths run `doctor` (Node/npx/LikeC4 toolchain checks) at the end of `init`. Then point it at your code. See `QUICKSTART.md`.
+
+To reset `system.c4`/`views.c4` back to blank templates and re-run `/assessment` from scratch (backing up the current model first), use `./install.sh --clean /path/to/your-project`. Run `./install.sh doctor /path/to/your-project` any time to re-check the toolchain.
 
 ## The One Rule
 

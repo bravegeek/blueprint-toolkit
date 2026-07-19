@@ -53,7 +53,7 @@ The base specification includes code-level modeling alongside architecture-level
 
 ## Code-Level Extraction Format
 
-The `/assessment` skill's Pass 3c emits a JSON intermediate extraction format (the swap point for future AST extractors):
+The `/assessment` skill's Code pass (Extraction step) emits a JSON intermediate extraction format (the swap point for future AST extractors):
 
 ```json
 {
@@ -89,7 +89,7 @@ The `/assessment` skill's Pass 3c emits a JSON intermediate extraction format (t
 }
 ```
 
-Pass 4 synthesis reads this format and generates `.c4` elements with `sourceLocation` metadata and confidence tags.
+The Model pass's synthesis step reads this format and generates `.c4` elements with `sourceLocation` metadata and confidence tags.
 
 ## SourceLocation Metadata Convention
 
@@ -118,8 +118,10 @@ This is the join key for deterministic extraction: when a future AST extractor o
 | `blueprint/model/.likec4rc` | LikeC4 project config |
 | `blueprint/bin/likec4` | Wrapper CLI — always use this instead of a bare `likec4`/`npx likec4` |
 | `.mcp.json` | LikeC4 MCP server — read-only model query |
-| `skills/assessment/SKILL.md` | Four-pass system analysis with code-level extraction |
-| `skills/assessment/scan.sh` | Read-only discovery scanner for assessment Passes 1 & 3. One portable call — `bash skills/assessment/scan.sh <target> [1\|3\|all]` — replacing the ad-hoc find/grep sweeps. Emits sectioned plain text; surfaces candidates, never final facts. Any agent with a shell can run it. |
+| `skills/assessment/SKILL.md` | Lean, procedure-only four-pass system analysis (Census/Infrastructure/Code/Model) with code-level extraction |
+| `skills/assessment/reference/` | Confidence tiers, extraction format, disambiguation, domain-rule guidance, stack-specific probes |
+| `skills/assessment/extractors/` | Deterministic (`tsserver`) and framework (`llm-nextjs`) extraction scripts wired into the Code pass's Extraction step |
+| `skills/assessment/scan.sh` | Read-only discovery scanner for the Census and Code passes. One portable call — `bash skills/assessment/scan.sh <target> [1\|3\|all]` — replacing the ad-hoc find/grep sweeps. Emits sectioned plain text; surfaces candidates, never final facts. Any agent with a shell can run it. |
 | `skills/blueprint-change/SKILL.md` | Ticket → EARS → .c4 diff (includes code-level impact check) |
 
 ## LikeC4 Syntax Quick Reference

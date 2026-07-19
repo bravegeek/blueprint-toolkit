@@ -5,7 +5,7 @@ TBD - created by archiving change functional-module-components. Update Purpose a
 ## Requirements
 ### Requirement: A component is a class or a cohesive functional module
 
-Pass 3c SHALL treat a code-level `component` as either an exported class **or** a cohesive functional module — a single source file whose exported functions, constants, and types form one structural unit. The presence or absence of a class MUST NOT determine whether a module is emitted.
+The Code pass's Extraction step SHALL treat a code-level `component` as either an exported class **or** a cohesive functional module — a single source file whose exported functions, constants, and types form one structural unit. The presence or absence of a class MUST NOT determine whether a module is emitted.
 
 #### Scenario: A class-free module of functions is a component
 
@@ -35,7 +35,7 @@ Structural significance SHALL be determined by cross-module import evidence: a m
 
 ### Requirement: Cross-module type aliases are contracts
 
-Pass 3c SHALL emit exported type aliases (including discriminated-union types) imported across module boundaries as `contract` entries, the same way exported interfaces are, recording `kind` as `"type"` or `"interface"`.
+The Code pass's Extraction step SHALL emit exported type aliases (including discriminated-union types) imported across module boundaries as `contract` entries, the same way exported interfaces are, recording `kind` as `"type"` or `"interface"`.
 
 #### Scenario: A union type imported by another service is a contract
 

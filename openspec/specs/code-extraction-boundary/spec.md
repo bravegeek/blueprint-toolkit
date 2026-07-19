@@ -5,11 +5,11 @@ TBD - created by archiving change nextjs-tsserver-extractor. Update Purpose afte
 ## Requirements
 ### Requirement: Extractors emit only the shared extraction format
 
-Every code-level extraction source SHALL emit its output using only the Pass 3c extraction JSON already defined in `skills/assessment/SKILL.md` — the `{ source, language, components[], contracts[], edges[] }` shape with per-entry `confidence` and `evidence`. A source MUST NOT introduce source-specific fields, and MUST NOT emit any downstream artifact other than this JSON.
+Every code-level extraction source SHALL emit its output using only the Extraction step's extraction JSON already defined in `skills/assessment/SKILL.md` — the `{ source, language, components[], contracts[], edges[] }` shape with per-entry `confidence` and `evidence`. A source MUST NOT introduce source-specific fields, and MUST NOT emit any downstream artifact other than this JSON.
 
 #### Scenario: A new source produces standard JSON
 
-- **WHEN** any extraction source (deterministic or LLM) runs during Pass 3c
+- **WHEN** any extraction source (deterministic or LLM) runs during the Extraction step
 - **THEN** its entire output is a document conforming to the existing extraction format
 - **AND** no field outside the documented format (`source`, `language`, `components`, `contracts`, `edges`, and their documented sub-fields) is present
 
@@ -17,11 +17,11 @@ Every code-level extraction source SHALL emit its output using only the Pass 3c 
 
 - **WHEN** a source's underlying tool exposes richer data than the format captures (e.g. type strings, tool-native URI/range shapes, quickinfo)
 - **THEN** that data is mapped down to the format's fields or dropped
-- **AND** it never reaches Pass 4 synthesis or the `.c4` model
+- **AND** it never reaches Model synthesis or the `.c4` model
 
 ### Requirement: Provenance is recorded per output
 
-Each extraction output SHALL set `source` to a stable identifier of the tool that produced it (e.g. `tsserver`, `llm-nextjs`, `llm-assessment`), so provenance is auditable and Pass 4 can attribute every fact.
+Each extraction output SHALL set `source` to a stable identifier of the tool that produced it (e.g. `tsserver`, `llm-nextjs`, `llm-assessment`), so provenance is auditable and Model can attribute every fact.
 
 #### Scenario: tsserver output is attributed
 
@@ -74,9 +74,9 @@ Adding a new source SHALL NOT require changing the extraction format. Free-strin
 - **THEN** they populate the existing free-string `edges[].kind` field
 - **AND** no change to the extraction format is required
 
-### Requirement: Pass 4 preserves source confidence via sourceLocation reconciliation
+### Requirement: Model preserves source confidence via sourceLocation reconciliation
 
-Pass 4 SHALL determine each emitted element's confidence by reconciling all extraction entries that share its `sourceLocation` and taking the strongest source claim, rather than from the LLM's own reading. A `sourceLocation` that any deterministic source reports as `PROVABLE` SHALL be emitted `#provable`, even when an LLM source also describes the same location as `INFERRED`.
+Model SHALL determine each emitted element's confidence by reconciling all extraction entries that share its `sourceLocation` and taking the strongest source claim, rather than from the LLM's own reading. A `sourceLocation` that any deterministic source reports as `PROVABLE` SHALL be emitted `#provable`, even when an LLM source also describes the same location as `INFERRED`.
 
 #### Scenario: A tsserver-resolved element renders provable
 
@@ -92,7 +92,7 @@ Pass 4 SHALL determine each emitted element's confidence by reconciling all extr
 
 ### Requirement: Strongest claim wins when sources overlap on a location
 
-When multiple sources report the same `sourceLocation` (node identity overlap, which the edge-level disjointness contract does not cover), Pass 4 SHALL resolve confidence to the strongest claim in precedence `PROVABLE` > `INFERRED`, and MUST NOT let an `INFERRED` description downgrade a `PROVABLE` resolution of the same location.
+When multiple sources report the same `sourceLocation` (node identity overlap, which the edge-level disjointness contract does not cover), Model SHALL resolve confidence to the strongest claim in precedence `PROVABLE` > `INFERRED`, and MUST NOT let an `INFERRED` description downgrade a `PROVABLE` resolution of the same location.
 
 #### Scenario: INFERRED does not downgrade PROVABLE
 

@@ -31,7 +31,7 @@ A tool that generates a structural diagram (LikeC4) of a proposed change *before
 2. **Never write `.c4` directly** — all model changes go through `/blueprint-change` so the human reviews the diagram first.
 3. **Agent-agnostic first** — the canonical skill is vendor-neutral; per-agent files are thin wrappers (see above).
 4. **Assessment reads, never infers** — `/assessment` derives elements from the current codebase only, from scratch each run. It does not reuse prior assessments or `blueprint/.backup/` as source material.
-5. **One validation point** — no `likec4 validate` against scratch files mid-pass; validate once, against the real target files, after Pass 4.
+5. **One validation point** — no `likec4 validate` against scratch files mid-pass; validate once, against the real target files, after Model.
 6. **Confidence is explicit** — `#provable` (certain from code artifacts), `#inferred` (LLM pattern-match), no tag (developer-confirmed).
 
 ## Key Files

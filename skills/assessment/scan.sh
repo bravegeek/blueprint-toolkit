@@ -1,23 +1,25 @@
 #!/usr/bin/env bash
 #
-# Assessment directory scanner — Passes 1 & 3 discovery, one pre-approvable call.
+# Assessment directory scanner — Census & Code-pass discovery, one pre-approvable call.
 #
 # Usage: scan.sh <target-path> [section]
 #
 #   target-path   Root of the project to assess (default: .)
-#   section       1 | 3 | all   Which pass's discovery to emit (default: all)
+#   section       1 | 3 | all   Which pass's discovery to emit (default: all) —
+#                 "1" = Census, "3" = Code (kept numeric for stability; see SKILL.md)
 #
-# Replaces the ad-hoc grep/find/git-ls-files invocations that Passes 1 and 3 of the
-# assessment skill would otherwise run one at a time — each of which triggers its own
+# Replaces the ad-hoc grep/find/git-ls-files invocations that the Census and Code passes of
+# the assessment skill would otherwise run one at a time — each of which triggers its own
 # permission prompt because the pattern text changes every run. This is a single, stable
 # command surface: allowlist it once (Bash(bash .../scan.sh:*)) and the whole discovery
 # phase runs prompt-free, in any harness that can run a shell.
 #
 # Output is a sectioned plain-text report on stdout (=== SECTION: NAME ===). It is read
-# by the LLM as evidence for Pass 1 (Discover) and the grep-based signals of Pass 3
-# (Analyze). It is deliberately NOT the Pass 3c extraction JSON — the deterministic
-# extractors (tsserver-extractor.mjs, nextjs-recipe-extractor.mjs, reducer recipe) still
-# own that format. This scanner surfaces *candidates and signals*, never final facts.
+# by the LLM as evidence for Census (what exists) and the grep-based signals of the Code
+# pass's Module graph / Orchestration steps. It is deliberately NOT the Extraction step's
+# JSON — the deterministic extractors (extractors/tsserver-extractor.mjs,
+# extractors/nextjs-recipe-extractor.mjs, reducer recipe) still own that format. This
+# scanner surfaces *candidates and signals*, never final facts.
 #
 # Portability: pure bash + POSIX-ish grep/find/git. No Node, no jq. Nothing here executes
 # application code — read-only static inspection only.
@@ -79,7 +81,7 @@ else
 fi
 printf 'section: %s\n' "$SECTION"
 
-# ── PASS 1 — Discover ───────────────────────────────────────────────────────────────
+# ── CENSUS ──────────────────────────────────────────────────────────────────────────
 if want 1; then
   section "FILE_INVENTORY"
   list_files
@@ -93,7 +95,7 @@ if want 1; then
   list_files | grep -E '(^|/)(main|app|index|server|__main__)\.(py|ts|tsx|js|go|rs)$' || echo "(none)"
 
   section "ORCHESTRATOR"
-  # Signature greps per orchestrator; presence gates what Pass 3b looks for.
+  # Signature greps per orchestrator; presence gates what the Code pass's Orchestration step looks for.
   printf -- '--- prefect ---\n';  scan --include='*.py' '@flow|@task'
   printf -- '--- airflow ---\n';  scan --include='*.py' 'airflow|DAG\(|>>'
   printf -- '--- celery ---\n';   scan --include='*.py' '@app\.task|@shared_task|\.delay\(|\.apply_async\('
@@ -112,7 +114,7 @@ if want 1; then
   fi
 fi
 
-# ── PASS 3 — Analyze (candidate signals) ────────────────────────────────────────────
+# ── CODE (candidate signals) ─────────────────────────────────────────────────────────
 if want 3; then
   section "PY_COMPONENTS"
   # Exported classes / functions (candidates; cross-module import evidence decides).
@@ -145,7 +147,7 @@ if want 3; then
   scan --include='*.ts' '^export type \w+(Action|Command|Event) ='
 
   section "SPEC_CONTRACTS"
-  # Design-time contract dirs (specs/*/contracts/) — conditional emission in Pass 4.
+  # Design-time contract dirs (specs/*/contracts/) — conditional emission in Model.
   find "$TARGET" -type d -name contracts 2>/dev/null \
     | grep -E '/specs/' | sed "s#^$TARGET/##" | sort || echo "(none)"
 fi

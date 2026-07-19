@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Pass 4 Converter: Transform extraction JSON to .c4 with confidence tags
+ * Model Converter: Transform extraction JSON to .c4 with confidence tags
  *
  * Usage: node pass4-converter.mjs <union-json>
  *
@@ -89,7 +89,7 @@ function main() {
     const extraction = loadJson(file);
 
     console.log('// ============================================================');
-    console.log('// Pass 4 Output: Code-Level Elements with Confidence Tags');
+    console.log('// Model Output: Code-Level Elements with Confidence Tags');
     console.log('// ============================================================\n');
 
     const c4 = generateC4(extraction);

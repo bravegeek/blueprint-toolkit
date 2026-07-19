@@ -13,13 +13,27 @@ You also need an agent that reads `AGENTS.md` — Claude Code, Cursor, opencode,
 
 ## Setup
 
-**1. Install the toolkit into your project:**
+**1. Install the toolkit into your project.**
+
+If you've already cloned this repo:
 
 ```bash
-./install.sh /path/to/your-project [project-name]
+./install.sh init /path/to/your-project [project-name]
+./install.sh add-skill assessment /path/to/your-project
+./install.sh add-skill blueprint-change /path/to/your-project
 ```
 
-The script copies everything below into the target, sets the project name in `.likec4rc` (prompting if you didn't pass one), and never overwrites existing files — re-running is safe.
+`init` installs the base substrate, sets the project name in `.likec4rc` (prompting if you didn't pass one), and runs `doctor` at the end to confirm the toolchain works. `add-skill` installs one skill at a time — run it once per skill you want. Existing files are never overwritten by default; re-running is safe (`--force` pulls in updates).
+
+If you haven't cloned the repo, bootstrap without cloning — any verb works, not just `init`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/bravegeek/blueprint-toolkit/main/bootstrap.sh | bash -s -- init /path/to/your-project
+curl -fsSL https://raw.githubusercontent.com/bravegeek/blueprint-toolkit/main/bootstrap.sh | bash -s -- add-skill assessment /path/to/your-project
+curl -fsSL https://raw.githubusercontent.com/bravegeek/blueprint-toolkit/main/bootstrap.sh | bash -s -- add-skill blueprint-change /path/to/your-project
+```
+
+Each invocation fetches the toolkit into a fresh temp dir, runs the requested verb, and cleans up afterward — there's no lingering local checkout, so re-run the one-liner (swapping the verb) for each step.
 
 ```
 your-project/
@@ -33,6 +47,9 @@ your-project/
 │       └── likec4        ← always run LikeC4 through this, not a bare `likec4`
 ├── skills/
 │   ├── assessment/
+│   │   ├── SKILL.md
+│   │   ├── reference/    ← confidence tiers, extraction format, stack probes
+│   │   └── extractors/   ← deterministic/framework extraction scripts
 │   └── blueprint-change/
 ├── AGENTS.md
 └── .mcp.json
@@ -40,7 +57,13 @@ your-project/
 
 **2.** (Manual install only) Copy the tree above yourself, set `name` in `blueprint/model/.likec4rc`, and `chmod +x blueprint/bin/likec4`.
 
-**3. Preview the empty model:**
+**3. Check the toolchain (optional — `init` already ran this):**
+
+```bash
+./install.sh doctor /path/to/your-project
+```
+
+**4. Preview the empty model:**
 
 ```bash
 cd blueprint/model && ../bin/likec4 serve
@@ -56,9 +79,9 @@ Run the assessment skill from your project root:
 /assessment .
 ```
 
-The skill reads your system in four passes (file layout → schema/storage → module graph → synthesis) and proposes a `.c4` model with every element confidence-tiered. Review the proposed output, then commit the confirmed model.
+The skill reads your system in four passes — **Census** (file layout, stack, services) → **Infrastructure** (schema, storage, topology) → **Code** (module graph, orchestration, extraction) → **Model** (synthesize, propose `.c4`) — and proposes a model with every element confidence-tiered. Review the proposed output, then commit the confirmed model.
 
-> **Stack-specific probes:** the assessment skill ships with Python/Postgres/S3 probe examples. The `## Pass 2` and `## Pass 3` sections in `skills/assessment/SKILL.md` are annotated — adapt the probe code to your stack before running.
+> **Stack-specific probes:** the assessment skill ships with Python/Postgres/S3 and Node/Docker probe examples under `skills/assessment/reference/stack-probes/` — adapt the probe code to your stack before running the Infrastructure and Code passes.
 
 ### Re-running assessment from scratch
 
@@ -142,10 +165,10 @@ This should produce:
 
 **2. Check for extraction artifacts:**
 
-The assessment skill may cache the intermediate extraction JSON (`_codeLevelExtraction.json`). Inspect it to verify:
-- `source: "llm-assessment"`
+The assessment skill's Extraction step writes intermediate extraction JSON per source (e.g. `_extraction_tsserver.json`, `_extraction_llm-assessment.json`) and a unioned `_extraction_union.json` that Model consumes. Inspect the union to verify:
+- Per-source `source` values present (e.g. `"tsserver"`, `"llm-assessment"`, `"llm-nextjs"`)
 - `language: "python"` or `"typescript"`
-- `components[]`, `contracts[]`, `edges[]` with the format defined in `skills/assessment/SKILL.md`
+- `components[]`, `contracts[]`, `edges[]` with the format defined in `skills/assessment/reference/extraction-format.md`
 
 **3. Generate code-structure views:**
 
